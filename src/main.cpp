@@ -4,6 +4,8 @@
 using namespace std;
 
 Setting setting;
+#define LINEAR 0
+#define ELMORE 1
 
 int main(int argc, char *argv[]){
 
@@ -13,15 +15,23 @@ int main(int argc, char *argv[]){
     
     string input_file_name(argv[1]);
     string output_file_name(argv[2]);
+    string preOrder(argv[3]);
+    string inOrder(argv[4]);
+    string layer(argv[5]);
     
     setting.input_file_name= input_file_name;
     setting.output_file_name = output_file_name;
+    setting.preOrderfile=preOrder;
+    setting.inOrderfile=inOrder;
+    setting.layerfile=layer;
 
     Router router;
     router.init();
+    router.buildTopology();
+    router.setdelay_model(ELMORE);
     router.route();
-    router.buildSolution();
-    router.writeSolution();
+    //router.buildSolution();
+    //router.writeSolution();
     
     cout << "End of Process" << endl;
     return 0;

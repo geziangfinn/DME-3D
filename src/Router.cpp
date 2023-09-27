@@ -12,25 +12,26 @@ using std::setprecision;
 #define eps 1e-6
 const string padding(30, '=');
 
-void TreeTopology::init(int leafNum, int sz) {
+void TreeTopology::inittree(int leafNum, int sz, vector<int> preOrder, vector<int> inOrder) {
     leafNumber = leafNum;
     size = sz;
     cout << "Initialize topo: " << leafNum << " leaves and " << sz << " nodes in total" << endl;
-    constructTree(true);
+    //constructTree(true);
+    constructTree(preOrder,inOrder);
 }
-void TreeTopology::constructTree(bool modifyCurrentTree) {
+void TreeTopology::constructTree_old(bool modifyCurrentTree) {
     vector<vector<int>> DAG(size);
     // cout << "rows " << HC_result.rows() << endl;
-    int n_merges = HC_result.rows();
-    int cur_internal_node_idx = leafNumber;
-    for (int i = 0; i < n_merges; i++) {
-        int p1 = HC_result[i][0];
-        int p2 = HC_result[i][1];
-        DAG[cur_internal_node_idx].push_back(p1);
-        DAG[cur_internal_node_idx].push_back(p2);
-        cur_internal_node_idx++;
-        // cout << "Merge " << p1 << " and " << p2 << endl;
-    }
+    //int n_merges = HC_result.rows();
+    // int cur_internal_node_idx = leafNumber;
+    // for (int i = 0; i < n_merges; i++) {
+    //     int p1 = HC_result[i][0];
+    //     int p2 = HC_result[i][1];
+    //     DAG[cur_internal_node_idx].push_back(p1);
+    //     DAG[cur_internal_node_idx].push_back(p2);
+    //     cur_internal_node_idx++;
+    //     cout << "Merge " << p1 << " and " << p2 << endl;
+    // }
     // Construct tree
     tmp_root = make_shared<TreeNode>(size - 1);  // last merge point as root
     std::function<void(shared_ptr<TreeNode>)> buildTree = [&](shared_ptr<TreeNode> curNode) {
@@ -66,6 +67,57 @@ void TreeTopology::constructTree(bool modifyCurrentTree) {
     if (modifyCurrentTree == true) {
         root = tmp_root;
     }
+}
+
+void TreeTopology::constructTree(vector<int> preOrder, vector<int> inOrder)
+{
+    root=buildTree(preOrder,inOrder,0,preOrder.size()-1,0,inOrder.size()-1);
+
+    std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+         if(curNode!=nullptr){
+            postOrderTraversal(curNode->lc);
+            postOrderTraversal(curNode->rc);
+            int curId = curNode->id;
+            cout<<"Vis: "<<curId<<endl;
+            //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
+        }
+    };
+    postOrderTraversal(root);
+}
+
+void TreeTopology::layerassignment(vector<pair<int, int>> IdAndLayer){
+
+    std::function<void(shared_ptr<TreeNode>, int&)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode, int& index) {
+        if(curNode!=nullptr){
+            int curId = curNode->id;
+            assert(IdAndLayer[index].first==curId);
+            curNode->layer=IdAndLayer[index].second;
+            index++;
+            //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
+            preOrderTraversal(curNode->lc,index);
+            preOrderTraversal(curNode->rc,index);
+        }
+    };
+    int index=0;
+    preOrderTraversal(root,index);
+}
+
+shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
+{
+    if(preStart>preEnd)
+        {
+            return NULL;
+        }
+        auto curRoot=make_shared<TreeNode>(pre[preStart]);
+        id_treeNode[pre[preStart]] = curRoot;
+
+        int rootInInorder=inStart;
+
+        while (rootInInorder < inEnd && pre[preStart] != in[rootInInorder]) rootInInorder++;
+
+        curRoot->lc=buildTree(pre,in,preStart+1,rootInInorder-inStart+preStart,inStart,rootInInorder-1);
+        curRoot->rc=buildTree(pre,in,rootInInorder-inStart+preStart+1,preEnd,rootInInorder+1,inEnd);
+        return curRoot;
 }
 
 void Router::init() {
@@ -149,8 +201,8 @@ void Router::HC() {
     printf("%s\n", rep.z.tostring().c_str());
 
     // 3. Construct binary tree topology
-    topo = make_shared<TreeTopology>(rep.z);
-    topo->init(xy.rows(), 2 * xy.rows() - 1);
+    //topo = make_shared<TreeTopology>(rep.z);
+    //topo->init(xy.rows(), 2 * xy.rows() - 1);
 
     cout << padding << "Finish Topology generation" << padding << endl;
 }
@@ -243,47 +295,99 @@ void Router::DME() {
     vertexTRR.resize(topo->size);
     vertexDistE.resize(topo->size);
 
+    bool RLC=true;
+
     // 1. Build Tree of Segments (bottom up)
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
         int curId = curNode->id;
-        if (curNode->lc != NULL && curNode->rc != NULL) {
+        if (curNode->lc != NULL && curNode->rc != NULL) {//的确不会有只有一个子节点的中间节点
             postOrderTraversal(curNode->lc);
             postOrderTraversal(curNode->rc);
 
             // create merging segment for curNode
-            auto& ms_a = vertexMS[curNode->lc->id];
-            auto& ms_b = vertexMS[curNode->rc->id];
+            //auto& ms_a = vertexMS[curNode->lc->id];
+            //auto& ms_b = vertexMS[curNode->rc->id];
+
+            auto ms_a = curNode->lc->trr.core;
+            auto ms_b = curNode->rc->trr.core;
             // get |e_a|, |e_b|
             double d = min(L1Dist(ms_a.p1, ms_b.p1), L1Dist(ms_a.p1, ms_b.p2));
             d = min(d, L1Dist(ms_a.p2, ms_b.p1));
             d = min(d, L1Dist(ms_a.p2, ms_b.p2));  // but why need to calc 2*2 possiblity?
-            double e_a_dist = (ms_b.delay - ms_a.delay + d) / 2;
-            double e_b_dist = (ms_a.delay - ms_b.delay + d) / 2;
-            if (e_a_dist < 0 || e_b_dist < 0) {
-                cout << "Skew too large" << endl;
-                exit(1);
+            
+            // double e_a_dist = (ms_b.delay - ms_a.delay + d) / 2;
+            // double e_b_dist = (ms_a.delay - ms_b.delay + d) / 2;
+            double e_a_dist;
+            double e_b_dist;
+            if(delay_model==LINEAR_DELAY)// linear delay model
+            {
+                e_a_dist = (curNode->rc->delay - curNode->lc->delay + d) / 2;
+                e_b_dist = (curNode->lc->delay - curNode->rc->delay + d) / 2;
+                if (e_a_dist < 0 || e_b_dist < 0) {
+                    cout << "Skew too large" << endl;//!
+                    exit(1);
+                }
+            } else if(delay_model==ELMORE_DELAY)// elmore delay(3d)
+            {
+                double x=calc_x_RC(curNode->lc,curNode->rc,curNode,d);
+                if(0 <= x && x <= d){
+                    e_a_dist = x;
+                    e_b_dist = d - x;
+                }
+                else if(x < 0){//! 这里是否有假设 a b的相对位置关系？？
+                    e_b_dist = calc_L2_RC(curNode->lc,curNode->rc,curNode, 0);
+                    assert(e_b_dist > 0);
+                    e_a_dist = 0;
+                }
+                else if(x > d){
+                    e_a_dist = calc_L2_RC(curNode->lc,curNode->rc,curNode, 1);
+                    assert(e_a_dist > 0);
+                    e_b_dist = 0;
+                }
             }
+            
+            // todo : this delay should be changed
+            // ms_v.delay = e_a_dist + ms_a.delay; 
+            // e_a+ms_a is supposed to be equal to e_b+ms_b
+            // todo update treenode delay and capacitance, segment should be a member of tree node, and TRR should be a member of segment, what about rebuild the code structure?
+            
+            update_merge_Capacitance(curNode,curNode->lc, curNode->rc,e_a_dist,e_b_dist);
+
+            update_merge_Delay(curNode,curNode->lc, curNode->rc,e_a_dist,e_b_dist);
+
             vertexDistE[curNode->lc->id] = e_a_dist;
             vertexDistE[curNode->rc->id] = e_b_dist;
 
             // get trr_a, trr_b
-            TRR trr_a(ms_a, e_a_dist);
-            TRR trr_b(ms_b, e_b_dist);
-            vertexTRR[curNode->lc->id] = trr_a;
-            vertexTRR[curNode->rc->id] = trr_b;
+            //TRR trr_a(ms_a, e_a_dist);
+            //TRR trr_b(ms_b, e_b_dist);
+            //vertexTRR[curNode->lc->id] = trr_a;
+            //vertexTRR[curNode->rc->id] = trr_b;
+
+            curNode->lc->trr.radius=e_a_dist;
+            curNode->rc->trr.radius=e_b_dist;
+
             // intersect trr_a, trr_b to get ms_v
-            Segment ms_v = TRRintersect(trr_a, trr_b);
+            Segment ms_v = TRRintersect(curNode->lc->trr, curNode->rc->trr);
             // cout << "Merging result: " << ms_v << endl;
             if (ms_v.id == -1) {
                 cout << "Merge failure" << endl;
                 exit(1);
             }
-            ms_v.delay = e_a_dist + ms_a.delay;
+
+            //! new
+            //curNode->load_capacitance=curNode->lc->load_capacitance+curNode->rc->load_capacitance+c_v*d;//todo: a+b+wire capacitance, and consider snaking?
+            //? not d but max(ea,eb)?
+            //! new
             vertexMS[curId] = ms_v;
+
+            curNode->trr.core=ms_v;
             // cout << "Delay diff " << e_a_dist + ms_a.delay - (e_b_dist + ms_b.delay) << endl;
         } else {
             // Create ms for leaf node
-            vertexMS[curId] = Segment(taps[curId], taps[curId]);
+            //vertexMS[curId] = Segment(taps[curId], taps[curId]);
+            //vertexMS[curId] = Segment(taps[curId]);
+            curNode->trr.core = Segment(taps[curId]);
         }
     };
     postOrderTraversal(topo->root);
@@ -313,7 +417,11 @@ void Router::DME() {
                 int parId = par->id;
                 auto& trr_par = vertexTRR[parId];
                 trr_par.core = Segment(pl[parId], pl[parId]);
+                
                 trr_par.radius = vertexDistE[curId];
+                trr_par.radius=curNode->trr.radius;
+                assert(vertexDistE[curId]==curNode->trr.radius);
+                //! vertexDistE[curId] should equal to curNode->trr.radius here
 
                 // cout <<std::fixed<< "Before merge: the value for trr_par is" << setprecision(2) << trr_par << endl;
                 // if(trr_par.radius == 122663.50){
@@ -348,7 +456,7 @@ void Router::DME() {
 }
 
 void Router::route() {
-    HC();  // try hierarchical clustering
+    //HC();  // try hierarchical clustering
     DME();
 }
 bool db_equal(double a, double b) { return abs(a - b) < eps; }
@@ -457,3 +565,72 @@ void Router::writeSolution() {
     cout << "Total Wirelength: " << total_wl << endl;
     cout << padding << "Finish Write Result" << padding << endl;
 }
+
+void Router::buildTopology()
+{
+    vector<int> preOrderId;
+    vector<int> inOrderId;
+    vector<pair<int,int>> IdAndLayer;
+
+    ifstream preOrder(setting.preOrderfile);
+    if (preOrder.fail()) {
+        cout << "Fail to open file:" << setting.preOrderfile << endl;
+        exit(1);
+    } else {
+        cout << padding << "Successfully open input:" << setting.preOrderfile << padding << endl;
+    }
+
+    string preline;
+    while (getline(preOrder, preline)) {
+        istringstream iss(preline);
+        cout<<preline;
+        int Id;
+        iss>>Id;
+        preOrderId.push_back(Id);
+    }
+    //cout<<preOrderId.size();
+    ifstream inOrder(setting.inOrderfile);
+    if (inOrder.fail()) {
+        cout << "Fail to open file:" << setting.inOrderfile << endl;
+        exit(1);
+    } else {
+        cout << padding << "Successfully open input:" << setting.inOrderfile << padding << endl;
+    }
+
+    string line;
+    while (getline(inOrder, line)) {
+        istringstream in(line);
+        cout<<line;
+        int Id;
+        in>>Id;
+        //cout<<"?";
+        inOrderId.push_back(Id);
+    }
+    
+    ifstream layer(setting.layerfile);
+    if (layer.fail()) {
+        cout << "Fail to open file:" << setting.layerfile << endl;
+        exit(1);
+    } else {
+        cout << padding << "Successfully open input:" << setting.layerfile << padding << endl;
+    }
+
+    string layerline;
+    while (getline(layer, line)) {
+        istringstream in(line);
+        cout<<line<<endl;
+        int Id;
+        int layer;
+        in>>Id>>layer;
+        //cout<<"?";
+        IdAndLayer.push_back(make_pair(Id,layer));
+    }
+    
+    assert(preOrderId.size()==inOrderId.size());
+    topo=make_shared<TreeTopology>();
+    assert(topo);
+    topo->inittree(4,0,preOrderId,inOrderId);
+    topo->layerassignment(IdAndLayer);
+    exit(0);
+}
+
