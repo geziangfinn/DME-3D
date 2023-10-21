@@ -16,8 +16,8 @@
 #include <map>
 #include <cmath>
 #include <functional>
-#include "stdafx.h"
-#include "dataanalysis.h"
+#include "../alglib/src/stdafx.h"
+#include "../alglib/src/dataanalysis.h"
 
 // Boost libraries
 #include <boost/program_options.hpp>

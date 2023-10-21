@@ -125,35 +125,15 @@ void Router::init() {
     readInput();
 }
 void Router::readInput() {
-    ifstream fin(setting.input_file_name);
-    if (fin.fail()) {
-        cout << "Fail to open file:" << setting.input_file_name << endl;
-        exit(1);
-    } else {
-        cout << padding << "Successfully open input:" << setting.input_file_name << padding << endl;
-    }
-    string line;
+    vector<sink> sinks=parse(setting.input_file_name);
 
-    while (getline(fin, line)) {
-        istringstream iss(line);
-        if (iss.str().find("MAX_RUNTIME") != std::string::npos) {
-            MAX_RUNTIME = stoi(line.substr(line.find(" ") + 1));
-            cout << "MAX_RUNTIME: " << MAX_RUNTIME << endl;
-        }
-
-        if (iss.str().find("END TAPS") != std::string::npos) {
-            break;
-        } else if (iss.str().find("TAPS") != std::string::npos) {
-            NUM_TAPS = stoi(line.substr(line.find(" ") + 1));
-            cout << "NUM_TAPS: " << NUM_TAPS << endl;
-        } else if (iss.str().find("TAP") != std::string::npos) {
-            char buf[10];
-            int tap_id;
-            double x, y;
-            iss >> buf >> tap_id >> x >> y;
-            taps.emplace_back(tap_id, x, y);
-        }
+    int tap_id=0;
+    for(sink sink:sinks)
+    {
+        taps.emplace_back(tap_id, sink.x, sink.y,sink.layer,sink.capacitance);
+        tap_id++;
     }
+
     for (auto& tap : taps) {
         cout << tap << endl;
     }
@@ -207,7 +187,7 @@ void Router::HC() {
     cout << padding << "Finish Topology generation" << padding << endl;
 }
 
-inline double L1Dist(GridPoint p1, GridPoint p2) { return abs(p1.x - p2.x) + abs(p1.y - p2.y); }
+
 
 Segment TRRintersect(TRR& trr1, TRR& trr2) {
     // get four edges
@@ -300,7 +280,7 @@ void Router::DME() {
     // 1. Build Tree of Segments (bottom up)
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
         int curId = curNode->id;
-        if (curNode->lc != NULL && curNode->rc != NULL) {//的确不会有只有一个子节点的中间节点
+        if (curNode->lc != NULL && curNode->rc != NULL) {//!的确不会有只有一个子节点的中间节点
             postOrderTraversal(curNode->lc);
             postOrderTraversal(curNode->rc);
 
@@ -319,6 +299,7 @@ void Router::DME() {
             // double e_b_dist = (ms_a.delay - ms_b.delay + d) / 2;
             double e_a_dist;
             double e_b_dist;
+            //! ea for lc and eb for rc
             if(delay_model==LINEAR_DELAY)// linear delay model
             {
                 e_a_dist = (curNode->rc->delay - curNode->lc->delay + d) / 2;
@@ -336,15 +317,17 @@ void Router::DME() {
                 }
                 else if(x < 0){//! 这里是否有假设 a b的相对位置关系？？
                     e_b_dist = calc_L2_RC(curNode->lc,curNode->rc,curNode, 0);
-                    assert(e_b_dist > 0);
+                    //!assert(e_b_dist > d);
                     e_a_dist = 0;
                 }
                 else if(x > d){
                     e_a_dist = calc_L2_RC(curNode->lc,curNode->rc,curNode, 1);
-                    assert(e_a_dist > 0);
+                    //!assert(e_a_dist > d);
                     e_b_dist = 0;
                 }
             }
+
+            RLC_calculation(curNode,curNode->lc,curNode->rc,e_a_dist,e_b_dist);
             
             // todo : this delay should be changed
             // ms_v.delay = e_a_dist + ms_a.delay; 
@@ -392,6 +375,8 @@ void Router::DME() {
     };
     postOrderTraversal(topo->root);
     cout  << "Finish bottom-up process"  << endl;
+
+    exit(0);
 
     // 2. Find Exact Placement(top down)
     pl.resize(topo->size);
@@ -583,7 +568,7 @@ void Router::buildTopology()
     string preline;
     while (getline(preOrder, preline)) {
         istringstream iss(preline);
-        cout<<preline;
+        //cout<<preline;
         int Id;
         iss>>Id;
         preOrderId.push_back(Id);
@@ -600,7 +585,7 @@ void Router::buildTopology()
     string line;
     while (getline(inOrder, line)) {
         istringstream in(line);
-        cout<<line;
+        //cout<<line;
         int Id;
         in>>Id;
         //cout<<"?";
@@ -618,7 +603,7 @@ void Router::buildTopology()
     string layerline;
     while (getline(layer, line)) {
         istringstream in(line);
-        cout<<line<<endl;
+        //cout<<line<<endl;
         int Id;
         int layer;
         in>>Id>>layer;
@@ -629,8 +614,239 @@ void Router::buildTopology()
     assert(preOrderId.size()==inOrderId.size());
     topo=make_shared<TreeTopology>();
     assert(topo);
-    topo->inittree(4,0,preOrderId,inOrderId);
+    topo->inittree(taps.size(),preOrderId.size(),preOrderId,inOrderId);
     topo->layerassignment(IdAndLayer);
     exit(0);
 }
 
+void Router::setdelay_model(int delaymodel)
+{   
+    delay_model=delaymodel;
+}
+
+double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L){
+    double beta = r_v * (abs(nodeRight->layer - nodeMerge->layer)*nodeRight->load_capacitance -
+                        abs(nodeMerge->layer - nodeLeft->layer)*nodeLeft->load_capacitance +
+                        0.5*c_v*(pow((nodeRight->layer - nodeMerge->layer),2) -
+                        pow((nodeMerge->layer - nodeLeft->layer),2)));
+    double up = (nodeRight->delay - nodeLeft->delay) + r_w * L * (nodeRight->load_capacitance + 0.5 * c_w * L) + beta + r_v * c_w * abs(nodeRight->layer - nodeMerge->layer) * L;
+    double down = r_w * (nodeLeft->load_capacitance + nodeRight->load_capacitance  + c_w * L) + r_v * c_w * abs(nodeRight->layer - nodeLeft->layer);
+    double x = up/down;
+    return x;
+}
+
+double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag){
+    double alpha, beta, up;
+    //tag = 0: |eb| = L'
+    //tag = 1: |ea| = L'
+    if(tag == 0){
+        alpha = r_w * nodeRight->load_capacitance + r_v * c_w * abs(nodeRight->layer - nodeMerge->layer);
+        beta = r_v * (abs(nodeRight->layer - nodeMerge->layer)*nodeRight->load_capacitance -
+                      abs(nodeMerge->layer - nodeLeft->layer)*nodeLeft->load_capacitance +
+               0.5*c_v*((nodeRight->layer - nodeMerge->layer)^2 -
+                                                              (nodeMerge->layer - nodeLeft->layer)^2));
+        up = sqrt(2 * r_w * c_w * (nodeLeft->delay - nodeRight->delay) + alpha * alpha - 2 * r_w * c_w * beta) - alpha;
+    }
+
+    else{
+        alpha = r_w * nodeLeft->load_capacitance + r_v * c_w * abs(nodeLeft->layer - nodeMerge->layer);
+        beta = r_v * (abs(nodeMerge->layer - nodeLeft->layer)*nodeLeft->load_capacitance -
+                     abs(nodeRight->layer - nodeMerge->layer)*nodeRight->load_capacitance +
+                     0.5*c_v*(pow((nodeRight->layer - nodeMerge->layer),2) -
+                     pow((nodeMerge->layer - nodeLeft->layer),2)));
+        up = sqrt(2 * r_w * c_w * (nodeRight->delay - nodeLeft->delay) + alpha * alpha - 2 * r_w * c_w * beta) - alpha;
+    }     
+    return up/(r_w * c_w);
+}
+
+void update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb){
+    float delta_C = nodeLeft->load_capacitance + nodeRight->load_capacitance + c_w*(ea + eb) + c_v*(abs(nodeRight->layer - nodeLeft->layer));
+    //考虑了buffer insertion的电容update
+    if(delta_C > c_constraint){
+        nodeMerge->load_capacitance = 300;
+        //nodeMerge->needBuffer = 1;
+        return;
+    }
+    nodeMerge->load_capacitance = delta_C;
+}
+
+void update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb){
+    float delta_delay = nodeLeft->delay + 0.695 * (
+            0.5 * r_w * c_w * ea * ea +
+            r_w * (nodeLeft->load_capacitance + c_v * abs(nodeMerge->layer - nodeLeft->layer)) * ea +
+            r_v * (nodeLeft->load_capacitance * abs(nodeMerge->layer - nodeLeft->layer) + 0.5 * c_v * (nodeMerge->layer - nodeLeft->layer) * (nodeMerge->layer - nodeLeft->layer)) -
+            (r_w * c_v - r_v * c_w) * abs(nodeMerge->layer - nodeLeft->layer) * ea);
+    float delta_delay_right = nodeRight->delay + 0.695 * (
+            0.5 * r_w * c_w * eb * eb +
+            r_w * (nodeRight->load_capacitance + c_v * abs(nodeMerge->layer - nodeRight->layer)) * eb +
+            r_v * (nodeRight->load_capacitance * abs(nodeMerge->layer - nodeRight->layer) + 0.5 * c_v * (nodeMerge->layer - nodeRight->layer) * (nodeMerge->layer - nodeRight->layer)) -
+            (r_w * c_v - r_v * c_w) * abs(nodeMerge->layer - nodeRight->layer) * eb);
+
+    /*float delta_delay_right = nodeRight->delay +
+            r_w * (ea + eb) * (nodeRight->C + 0.5 * c_w * (ea + eb)) +
+            0.5 * r_w * c_w * ea * ea -
+            r_w * (nodeRight->C + c_v * abs(nodeMerge->layer - nodeRight->layer) + c_w * (ea + eb)) * ea +
+            r_v * (nodeRight->C * abs(nodeMerge->layer - nodeRight->layer) + 0.5 * c_v * abs(nodeMerge->layer - nodeRight->layer) * abs(nodeMerge->layer - nodeRight->layer)) +
+            r_w * c_w * abs(nodeMerge->layer - nodeRight->layer) * (ea + eb) -
+            (r_w * c_v - r_v * c_w) * abs(nodeMerge->layer - nodeRight->layer) * ea;*/
+    printf("/****Test Merge Delay****/\n"
+           "Delay before merge: Left: %f, Right: %f, after: Left: %f,  Right: %f\n", nodeLeft->delay,nodeRight->delay, delta_delay, delta_delay_right);
+    //按最大delay进行录入
+    if(delta_delay >= delta_delay_right)
+        nodeMerge->delay = delta_delay;
+    else
+        nodeMerge->delay = delta_delay_right;
+}
+
+double calc_standard_Capacitance(double capacitance_in_fF){
+    return (capacitance_in_fF/1000000000000000);
+}
+
+float calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeChild, float WL){// ta calculation
+    float t_pdi, theta, omega, numerator, denominator, elmore;
+    float wireLength = WL;
+    if(wireLength == 0)
+        return 0;
+    //如果两节点中间没有TSV
+    assert(nodeChild->load_capacitance<= c_constraint);
+    numerator = wireLength * r_w * (0.5 * wireLength * c_w_standard + calc_standard_Capacitance(nodeChild->load_capacitance));
+    //这里分母还没算完，后续要开根
+    denominator = wireLength * l_w * (0.5 * wireLength * c_w_standard + calc_standard_Capacitance(nodeChild->load_capacitance));
+    if(nodeMerge->layer != nodeChild->layer){
+        numerator += r_v * (0.5 * c_v_standard + calc_standard_Capacitance(nodeChild->load_capacitance + wireLength * c_w));
+        //denominator += l_v * (0.5 * c_v_standard + calc_standard_Capacitance(nodeChild->C + wireLength * c_w));
+    }
+    //给分母开根
+    denominator = sqrt(denominator);
+    //154953990144.000000
+    theta = 0.5 * (numerator/denominator);
+    omega = 1/denominator;
+    elmore = 0.695 * numerator;
+    //将单位换算回ps
+    t_pdi = roundf(1000000000000000 * (  (1.047 * exp((-1)*theta/0.85))/omega + elmore  ));
+    //printf("before : %f\n", 1000000000000000 * (  (1.047 * exp((-1)*theta/0.85))/omega));
+    return t_pdi;
+}
+
+void RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double& ea, double& eb){
+    float t_a, t_b;
+    //! ea for left and eb for right
+    t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
+    t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
+    //需要考虑extra wirelength存在的情况。但是尽量不要引入额外的线长。
+    while(fabs(t_a + nodeLeft->delay - (t_b + nodeRight->delay)) >= 1){//? >=1?
+        if(t_a + nodeLeft->delay > t_b + nodeRight->delay)// ? does this gurantee that ea>eb?
+            modify_coord_by_L1(ea, eb, nodeLeft, nodeRight, skewModifyStep);
+        else
+            modify_coord_by_L2(ea, eb, nodeLeft, nodeRight, skewModifyStep);// ? does this gurantee that eb>ea?
+
+        t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
+        t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
+    }
+    //printf("原本的 delay: left: %f, right: %f\n", nodeLeft->delay, nodeRight->delay);
+    printf("left: %f, right: %f\n t_a: %f, t_b: %f\n total left: %f, total right: %f\n", nodeLeft->delay, nodeRight->delay, t_a, t_b, t_a+nodeLeft->delay, t_b + nodeRight->delay);
+    t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
+    t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
+    printf("RC delay: %f, %f\n", t_a, t_b);
+
+    update_merge_Capacitance(nodeMerge, nodeLeft, nodeRight, ea, eb);
+    //update_merge_Delay(nodeMerge, nodeLeft, nodeRight, ea, eb);
+    if(t_a + nodeLeft->delay > t_b + nodeRight->delay)
+        nodeMerge->delay = t_a + nodeLeft->delay;
+    else
+        nodeMerge->delay = t_b + nodeRight->delay;
+}
+
+//delay_a > delay_b, ea -= x/2, eb+= x/2
+void modify_coord_by_L1(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
+    double min_manhattan=min_manhattan_dist(nodeLeft,nodeRight); 
+
+    assert(ea!=0||eb!=0);
+    
+    if(ea!=0 && eb!=0)    // if no node absolutely has extra wirelength(else, one of ea and eb should be 0) one special case: ea/eb=0 and eb/ea=d
+    {   if(ea>=x/2&&eb<=min_manhattan-x/2)
+        {
+            ea -= x/2;
+            eb += x/2;
+        }
+        else if(ea<x/2)// then eb must > min_manhattan-x/2, in this case, either decrease step or allow extra wirelength
+        {// here we allow extra wirelength
+            double delta=x-ea;
+            ea=0;
+            eb+=delta;
+        }
+
+    }
+    else if(ea==0)
+    {
+        cout<<"should eb has extra wirelength?\n";
+    }
+    else if(eb==0)
+    {
+        if((ea-min_manhattan)>x)
+        {
+            ea-=x;
+        }
+        else
+        {
+            double delta=x-(ea-min_manhattan);
+            ea-=x;
+            eb+=delta;
+        }
+    }
+    // if one node already has extra wirelength(must be ea??? or add assert?)
+}
+
+//delay_a < delay_b, ea += x/2, eb -= x/2
+void modify_coord_by_L2(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
+    double min_manhattan=min_manhattan_dist(nodeLeft,nodeRight); 
+
+    assert(ea!=0||eb!=0);
+    
+    if(ea!=0 && eb!=0)    // if no node absolutely has extra wirelength(else, one of ea and eb should be 0) one special case: ea/eb=0 and eb/ea=d
+    {   if(eb>=x/2&&ea<=min_manhattan-x/2)
+        {
+            eb -= x/2;
+            ea += x/2;
+        }
+        else if(eb<x/2)// then eb must > min_manhattan-x/2, in this case, either decrease step or allow extra wirelength
+        {// here we allow extra wirelength
+            double delta=x-eb;
+            eb=0;
+            ea+=delta;
+        }
+
+    }
+    else if(eb==0)
+    {
+        cout<<"should ea has extra wirelength?\n";
+    }
+    else if(ea==0)
+    {
+        if((eb-min_manhattan)>x)
+        {
+            eb-=x;
+        }
+        else
+        {
+            double delta=x-(eb-min_manhattan);
+            eb-=x;
+            ea+=delta;
+        }
+    }
+    // if one node already has extra wirelength(must be ea??? or add assert?)
+}
+
+double L1Dist(GridPoint p1, GridPoint p2) { return abs(p1.x - p2.x) + abs(p1.y - p2.y); }
+
+double min_manhattan_dist(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight)
+{
+    auto ms_a = nodeLeft->lc->trr.core;
+    auto ms_b = nodeRight->rc->trr.core;
+    // get |e_a|, |e_b|
+    double d = min(L1Dist(ms_a.p1, ms_b.p1), L1Dist(ms_a.p1, ms_b.p2));
+    d = min(d, L1Dist(ms_a.p2, ms_b.p1));
+    d = min(d, L1Dist(ms_a.p2, ms_b.p2));  // but why need to calc 2*2 possiblity?
+    assert(d>0);
+    return d;
+}
