@@ -1,6 +1,6 @@
 #include "Router.h"
 #include "Setting.h"
-
+#include "Parser.h"
 using std::cout;
 using std::endl;
 using std::setprecision;
@@ -93,7 +93,7 @@ void TreeTopology::layerassignment(vector<pair<int, int>> IdAndLayer){
             assert(IdAndLayer[index].first==curId);
             curNode->layer=IdAndLayer[index].second;
             index++;
-            //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
+            cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
             preOrderTraversal(curNode->lc,index);
             preOrderTraversal(curNode->rc,index);
         }
@@ -133,7 +133,7 @@ void Router::readInput() {
         taps.emplace_back(tap_id, sink.x, sink.y,sink.layer,sink.capacitance);
         tap_id++;
     }
-
+    cout.setf(ios::fixed,ios::floatfield);
     for (auto& tap : taps) {
         cout << tap << endl;
     }
@@ -152,39 +152,39 @@ void Router::NS() {
 
 // Agglomerative  Hierarchical Clustering
 void Router::HC() {
-    // 1. Create XY array
-    // vector<vector<double>> points;
-    string points_str;
-    points_str += "[";
-    for (int i = 0; i < taps.size(); i++) {
-        points_str += taps[i].str_xy();
-        if (i != taps.size() - 1) {
-            points_str += ",";
-        }
-    }
-    points_str += "]";
-    // cout <<"Points: " << points_str << endl;
+    // // 1. Create XY array
+    // // vector<vector<double>> points;
+    // string points_str;
+    // points_str += "[";
+    // for (int i = 0; i < taps.size(); i++) {
+    //     points_str += taps[i].str_xy();
+    //     if (i != taps.size() - 1) {
+    //         points_str += ",";
+    //     }
+    // }
+    // points_str += "]";
+    // // cout <<"Points: " << points_str << endl;
 
-    // 2. Create clusterizer
-    using namespace alglib;
-    clusterizerstate s;
-    ahcreport rep;
-    real_2d_array xy(points_str.c_str());
-    // int linkage_type = SINGLE_LINKAGE;
-    int linkage_type = COMPLETE_LINKAGE;
-    int metric = L1;
+    // // 2. Create clusterizer
+    // using namespace alglib;
+    // clusterizerstate s;
+    // ahcreport rep;
+    // real_2d_array xy(points_str.c_str());
+    // // int linkage_type = SINGLE_LINKAGE;
+    // int linkage_type = COMPLETE_LINKAGE;
+    // int metric = L1;
 
-    clusterizercreate(s);
-    clusterizersetpoints(s, xy, metric);  // manhattan dist
-    clusterizersetahcalgo(s, linkage_type);
-    clusterizerrunahc(s, rep);
-    printf("%s\n", rep.z.tostring().c_str());
+    // clusterizercreate(s);
+    // clusterizersetpoints(s, xy, metric);  // manhattan dist
+    // clusterizersetahcalgo(s, linkage_type);
+    // clusterizerrunahc(s, rep);
+    // printf("%s\n", rep.z.tostring().c_str());
 
-    // 3. Construct binary tree topology
-    //topo = make_shared<TreeTopology>(rep.z);
-    //topo->init(xy.rows(), 2 * xy.rows() - 1);
+    // // 3. Construct binary tree topology
+    // //topo = make_shared<TreeTopology>(rep.z);
+    // //topo->init(xy.rows(), 2 * xy.rows() - 1);
 
-    cout << padding << "Finish Topology generation" << padding << endl;
+    // cout << padding << "Finish Topology generation" << padding << endl;
 }
 
 

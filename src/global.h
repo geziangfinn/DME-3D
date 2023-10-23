@@ -6,7 +6,7 @@
 #include <cassert>
 #include <iomanip> 
 #include <sstream>
-#include <memory>
+#include <memory.h>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -16,8 +16,8 @@
 #include <map>
 #include <cmath>
 #include <functional>
-#include "../alglib/src/stdafx.h"
-#include "../alglib/src/dataanalysis.h"
+//#include "../alglib/src/stdafx.h"
+//#include "../alglib/src/dataanalysis.h"
 
 // Boost libraries
 #include <boost/program_options.hpp>

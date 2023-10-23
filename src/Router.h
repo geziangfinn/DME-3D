@@ -1,6 +1,5 @@
 #pragma once
 #include "global.h"
-#include "Parser.h"
 using namespace std;
 #define c_w 0.0002
 #define c_v 15.48
