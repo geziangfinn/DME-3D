@@ -325,6 +325,8 @@ public:
     vector<double> vertexDistE;
     shared_ptr<TreeTopology> topo;
 
+    string _RUNDIR = "../run_tmp/";
+
     // Structures to store the final routing result
     GridPoint clockSource;
     vector<GridPoint> pl;

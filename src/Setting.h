@@ -17,5 +17,6 @@ public:
     string topo_choice; // NS, CL, RGM
     int metric = 1; // 1=> L1, 2=>L2(euclidean)
     int refine_M = 6; // by default
+    string get_case_name();
 };
 extern Setting setting;

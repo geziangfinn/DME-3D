@@ -15,15 +15,9 @@ int main(int argc, char *argv[]){
     
     string input_file_name(argv[1]);
     string output_file_name(argv[2]);
-    string preOrder(argv[3]);
-    string inOrder(argv[4]);
-    string layer(argv[5]);
     
     setting.input_file_name= input_file_name;
     setting.output_file_name = output_file_name;
-    setting.preOrderfile=preOrder;
-    setting.inOrderfile=inOrder;
-    setting.layerfile=layer;
 
     Router router;
     router.init();

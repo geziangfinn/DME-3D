@@ -122,6 +122,9 @@ shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, in
 
 void Router::init() {
     // read input and build data structure
+    _RUNDIR = "../run_tmp/" + setting.get_case_name() + "/";
+    string cmd_clean = "rm -rf " + _RUNDIR + "; mkdir -p " + _RUNDIR;
+    system(cmd_clean.c_str());
     readInput();
 }
 void Router::readInput() {
@@ -553,11 +556,20 @@ void Router::writeSolution() {
 
 void Router::buildTopology()
 {
+    system(("rm -rf "+_RUNDIR+"/preOrder.txt").c_str());
+    system(("rm -rf "+_RUNDIR+"/inOrder.txt").c_str());
+    // ex: ./bin/ntuplace-r -aux ./run_tmp/die0/die0.aux -out ./run_tmp/die0 > ./run_tmp/die0-ntuplace.log
+    string cmd = "../bin/ZST_DME " + setting.input_file_name + " " + _RUNDIR+" > "+_RUNDIR+setting.get_case_name()+".log";
+
+    cout << "topology-cmd: " << cmd << "\n";
+    
+    system(cmd.c_str());
+    //exit(0);
     vector<int> preOrderId;
     vector<int> inOrderId;
     vector<pair<int,int>> IdAndLayer;
 
-    ifstream preOrder(setting.preOrderfile);
+    ifstream preOrder(_RUNDIR+"preOrder.txt");
     if (preOrder.fail()) {
         cout << "Fail to open file:" << setting.preOrderfile << endl;
         exit(1);
@@ -574,7 +586,7 @@ void Router::buildTopology()
         preOrderId.push_back(Id);
     }
     //cout<<preOrderId.size();
-    ifstream inOrder(setting.inOrderfile);
+    ifstream inOrder(_RUNDIR+"inOrder.txt");
     if (inOrder.fail()) {
         cout << "Fail to open file:" << setting.inOrderfile << endl;
         exit(1);
@@ -592,7 +604,7 @@ void Router::buildTopology()
         inOrderId.push_back(Id);
     }
     
-    ifstream layer(setting.layerfile);
+    ifstream layer(_RUNDIR+"preOrder.txt");
     if (layer.fail()) {
         cout << "Fail to open file:" << setting.layerfile << endl;
         exit(1);
@@ -616,7 +628,7 @@ void Router::buildTopology()
     assert(topo);
     topo->inittree(taps.size(),preOrderId.size(),preOrderId,inOrderId);
     topo->layerassignment(IdAndLayer);
-    exit(0);
+    //exit(0);
 }
 
 void Router::setdelay_model(int delaymodel)
