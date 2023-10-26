@@ -24,7 +24,7 @@ int main(int argc, char *argv[]){
     //exit(0);
     router.buildTopology();
     router.setdelay_model(ELMORE);
-    //router.route();
+    router.DME();
     //router.buildSolution();
     //router.writeSolution();
     
