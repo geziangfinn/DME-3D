@@ -1,6 +1,7 @@
 #include "Router.h"
 #include "Setting.h"
 #include "Parser.h"
+#include "Drawer.h"
 using std::cout;
 using std::endl;
 using std::setprecision;
@@ -123,7 +124,8 @@ shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, in
 void Router::init() {
     // read input and build data structure
     _RUNDIR = "../run_tmp/" + setting.get_case_name() + "/";
-    string cmd_clean = "rm -rf " + _RUNDIR + "; mkdir -p " + _RUNDIR;
+    _DRAWDIR = "../draw/" + setting.get_case_name() + "/";
+    string cmd_clean = "rm -rf " + _RUNDIR + "; mkdir -p " + _RUNDIR+"; rm -rf " + _DRAWDIR + "; mkdir -p " + _DRAWDIR;
     system(cmd_clean.c_str());
     readInput();
 }
@@ -192,13 +194,115 @@ void Router::HC() {
 
 
 
-Segment TRRintersect(TRR& trr1, TRR& trr2) {
+Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
     // get four edges
     // cout << "Merging: " << trr1 << " and " << trr2 << endl;
     vector<GridPoint> trr1_boundary_grid;
     vector<GridPoint> trr2_boundary_grid;
     vector<Segment> trr1_Sides;
     vector<Segment> trr2_Sides;
+    assert(trr1.radius!=0||trr2.radius!=0);
+    //if there is one trr's radius = 0
+    if(trr1.radius==0||trr2.radius==0)
+    {
+        if(trr1.radius==0)
+        {
+
+            if (trr2.core.slope() > 0) {
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x, trr2.core.p1.y - trr2.radius);
+                trr2_boundary_grid.emplace_back(trr2.core.p2.x + trr2.radius, trr2.core.p2.y);
+                trr2_boundary_grid.emplace_back(trr2.core.p2.x, trr2.core.p2.y + trr2.radius);
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x - trr2.radius, trr2.core.p1.y);  // clock-wise
+            } else if (trr2.core.slope() < 0) {
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x + trr2.radius, trr2.core.p1.y);
+                trr2_boundary_grid.emplace_back(trr2.core.p2.x, trr2.core.p2.y + trr2.radius);
+                trr2_boundary_grid.emplace_back(trr2.core.p2.x - trr2.radius, trr2.core.p2.y);
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x, trr2.core.p1.y - trr2.radius);  // clock-wise
+            } else {                                                                            // leaf node
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x, trr2.core.p1.y - trr2.radius);
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x + trr2.radius, trr2.core.p1.y);
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x, trr2.core.p1.y + trr2.radius);
+                trr2_boundary_grid.emplace_back(trr2.core.p1.x - trr2.radius, trr2.core.p1.y);  // clock-wise
+            }
+
+            for (int i = 0; i < 3; i++) {
+                trr2_Sides.emplace_back(trr2_boundary_grid[i], trr2_boundary_grid[i + 1]);
+            }
+            trr2_Sides.emplace_back(trr2_boundary_grid[3], trr2_boundary_grid[0]);
+
+            for (auto& seg2 : trr2_Sides) {
+                //cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
+                Segment seg = trr1.core.intersect(seg2);//! seg should be a single point in most cases
+                // ? could there be 2 intersection points for core and trr sides?
+                if (seg.id == 0) {
+                    return seg;
+                }
+                else if(seg.id==-2)
+                {
+                    if(trr2.insideTRR(trr1.core.p1))
+                    {
+                        return Segment(seg.p1,trr1.core.p1);
+                    }
+                    else if(trr2.insideTRR(trr1.core.p2))
+                    {
+                        return Segment(seg.p1,trr1.core.p2);
+                    }
+                }
+
+            }
+
+        }
+        else{
+            if (trr1.core.slope() > 0) {
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x, trr1.core.p1.y - trr1.radius);
+                trr1_boundary_grid.emplace_back(trr1.core.p2.x + trr1.radius, trr1.core.p2.y);
+                trr1_boundary_grid.emplace_back(trr1.core.p2.x, trr1.core.p2.y + trr1.radius);
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x - trr1.radius, trr1.core.p1.y);  // clock-wise
+            } else if (trr1.core.slope() < 0) {
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x + trr1.radius, trr1.core.p1.y);
+                trr1_boundary_grid.emplace_back(trr1.core.p2.x, trr1.core.p2.y + trr1.radius);
+                trr1_boundary_grid.emplace_back(trr1.core.p2.x - trr1.radius, trr1.core.p2.y);
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x, trr1.core.p1.y - trr1.radius);  // clock-wise
+            } else {                                                                            // leaf node
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x, trr1.core.p1.y - trr1.radius);
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x + trr1.radius, trr1.core.p1.y);
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x, trr1.core.p1.y + trr1.radius);
+                trr1_boundary_grid.emplace_back(trr1.core.p1.x - trr1.radius, trr1.core.p1.y);  // clock-wise
+            }
+            
+            for (int i = 0; i < 3; i++) {
+                trr1_Sides.emplace_back(trr1_boundary_grid[i], trr1_boundary_grid[i + 1]);
+            }
+            trr1_Sides.emplace_back(trr1_boundary_grid[3], trr1_boundary_grid[0]);
+
+            for (auto& seg1 : trr1_Sides) {
+                //cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
+                Segment seg = trr2.core.intersect(seg1);//! seg should be a single point in most cases
+                // ? could there be 2 intersection points for core and trr sides?
+                if (seg.id == 0) {
+                    return seg;
+                }
+                else if(seg.id==-2)
+                {
+                    if(trr1.insideTRR(trr2.core.p1))
+                    {
+                        return Segment(seg.p1,trr2.core.p1);
+                    }
+                    else if(trr1.insideTRR(trr2.core.p2))
+                    {
+                        return Segment(seg.p1,trr2.core.p2);
+                    }
+                }
+
+            }
+
+        }
+        
+        Segment ret;
+        ret.id = -1;
+        return ret;
+    }
+    // if both trr's radius > 0
     if (trr1.core.slope() > 0) {
         trr1_boundary_grid.emplace_back(trr1.core.p1.x, trr1.core.p1.y - trr1.radius);
         trr1_boundary_grid.emplace_back(trr1.core.p2.x + trr1.radius, trr1.core.p2.y);
@@ -254,14 +358,22 @@ Segment TRRintersect(TRR& trr1, TRR& trr2) {
     // for 4*4 check intersect
     for (auto& seg1 : trr1_Sides) {
         for (auto& seg2 : trr2_Sides) {
+            //cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
             Segment seg = seg1.intersect(seg2);
-            if (seg.id == 0) {
+            if (seg.id == 0||seg.id==-2) {
                 return seg;
             }
         }
     }
     cout << "Cannot find intersection between two TRRs" << endl;
     Segment ret;
+    draw_TRR_pair(trr1,trr2);
+    for (auto& seg1 : trr1_Sides) {
+        for (auto& seg2 : trr2_Sides) {
+            cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
+            Segment seg = seg1.intersect(seg2);
+        }
+    }
     ret.id = -1;
     return ret;
 }
@@ -273,6 +385,7 @@ void Router::DME() {
 
     // cout << seg1.intersect(seg2) << endl;
     // exit(1);
+    cout << BLUE << "[Router]" << RESET<<" begin DME\n";
 
     vertexMS.resize(topo->size);
     vertexTRR.resize(topo->size);
@@ -331,13 +444,13 @@ void Router::DME() {
             }
 
             RLC_calculation(curNode,curNode->lc,curNode->rc,e_a_dist,e_b_dist);
-            
+
             // todo : this delay should be changed
             // ms_v.delay = e_a_dist + ms_a.delay; 
             // e_a+ms_a is supposed to be equal to e_b+ms_b
             // todo update treenode delay and capacitance, segment should be a member of tree node, and TRR should be a member of segment, what about rebuild the code structure?
             
-            update_merge_Capacitance(curNode,curNode->lc, curNode->rc,e_a_dist,e_b_dist);
+            update_merge_Capacitance(curNode,curNode->lc, curNode->rc,e_a_dist,e_b_dist);//? there is a same function in RLC_calculation
 
             update_merge_Delay(curNode,curNode->lc, curNode->rc,e_a_dist,e_b_dist);
 
@@ -371,14 +484,17 @@ void Router::DME() {
             // cout << "Delay diff " << e_a_dist + ms_a.delay - (e_b_dist + ms_b.delay) << endl;
         } else {
             // Create ms for leaf node
-            //vertexMS[curId] = Segment(taps[curId], taps[curId]);
+            
+            vertexMS[curId] = Segment(taps[curId], taps[curId]);
             //vertexMS[curId] = Segment(taps[curId]);
+            
             curNode->trr.core = Segment(taps[curId]);
+            //cout<<"leaf node id: "<<curId<<endl;
         }
     };
     postOrderTraversal(topo->root);
     cout  << "Finish bottom-up process"  << endl;
-
+    draw_bottom_up();
     exit(0);
 
     // 2. Find Exact Placement(top down)
@@ -636,6 +752,66 @@ void Router::setdelay_model(int delaymodel)
     delay_model=delaymodel;
 }
 
+void Router::draw_bottom_up()
+{
+    string outFile = _DRAWDIR+ setting.get_case_name() + ".plt";
+    ofstream outfile( outFile.c_str() , ios::out );
+
+    outfile << " " << endl;
+    outfile << "set terminal png size 4000,4000" << endl;
+    outfile << "set output " << "\"" << _DRAWDIR << setting.get_case_name()+"_bottom_up"<<".png\"" << endl;
+    // outfile << "set multiplot layout 1, 2" << endl;
+    outfile << "set size ratio -1" << endl;
+    outfile << "set nokey" << endl << endl;
+
+    // for(int i=0; i<cell_list_top.size(); i++){
+    //     outfile << "set label " << i + 2 << " \"" << cell_list_top[i]->get_name() << "\" at " << cell_list_top[i]->get_posX() + cell_list_top[i]->get_width() / 2 << "," << cell_list_top[i]->get_posY() + cell_list_top[i]->get_height() / 2 << " center front" << endl;
+    // }
+    // outfile << "set xrange [0:" << _pChip->get_width() << "]" << endl;
+    // outfile << "set yrange [0:" << _pChip->get_height() << "]" << endl;
+    // outfile << "plot[:][:] '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' with filledcurves closed fc \"yellow\" fs border lc \"black\", '-' w l lt 1" << endl << endl;
+
+    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' w l lt 1" << endl << endl;
+    
+    outfile << "# TRR" << endl;
+    std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+        int curId = curNode->id;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            postOrderTraversal(curNode->lc);
+            postOrderTraversal(curNode->rc);
+            curNode->trr.draw_TRR(outfile);
+            return;
+        } else {
+            curNode->trr.draw_TRR(outfile);
+        }
+    };
+    postOrderTraversal(topo->root);
+    outfile << "EOF" << endl;
+
+    outfile << "# TRR cores" << endl;
+    std::function<void(shared_ptr<TreeNode>)> postOrderTraversal_core = [&](shared_ptr<TreeNode> curNode) {
+        int curId = curNode->id;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            postOrderTraversal_core(curNode->lc);
+            postOrderTraversal_core(curNode->rc);
+            curNode->trr.draw_core(outfile);
+            return;
+        } else {
+            curNode->trr.draw_core(outfile);
+        }
+    };
+    postOrderTraversal_core(topo->root);
+    outfile << "EOF" << endl;
+    
+
+    // outfile << "pause -1 'Press any key to close.'" << endl;
+    outfile.close();
+
+    system(("gnuplot " + outFile).c_str());
+
+    cout << BLUE << "[Router]" << RESET << " - Visualize the bottom_up graph in \'" << outFile << "\'.\n";
+}
+
 double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L){
     double beta = r_v * (abs(nodeRight->layer - nodeMerge->layer)*nodeRight->load_capacitance -
                         abs(nodeMerge->layer - nodeLeft->layer)*nodeLeft->load_capacitance +
@@ -811,10 +987,11 @@ void modify_coord_by_L1(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, s
 
 //delay_a < delay_b, ea += x/2, eb -= x/2
 void modify_coord_by_L2(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
+    assert(nodeLeft!=NULL||nodeRight!=NULL);
     double min_manhattan=min_manhattan_dist(nodeLeft,nodeRight); 
 
     assert(ea!=0||eb!=0);
-    
+
     if(ea!=0 && eb!=0)    // if no node absolutely has extra wirelength(else, one of ea and eb should be 0) one special case: ea/eb=0 and eb/ea=d
     {   if(eb>=x/2&&ea<=min_manhattan-x/2)
         {
@@ -853,12 +1030,126 @@ double L1Dist(GridPoint p1, GridPoint p2) { return abs(p1.x - p2.x) + abs(p1.y -
 
 double min_manhattan_dist(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight)
 {
-    auto ms_a = nodeLeft->lc->trr.core;
-    auto ms_b = nodeRight->rc->trr.core;
+    auto ms_a = nodeLeft->trr.core;
+    auto ms_b = nodeRight->trr.core;
     // get |e_a|, |e_b|
     double d = min(L1Dist(ms_a.p1, ms_b.p1), L1Dist(ms_a.p1, ms_b.p2));
     d = min(d, L1Dist(ms_a.p2, ms_b.p1));
     d = min(d, L1Dist(ms_a.p2, ms_b.p2));  // but why need to calc 2*2 possiblity?
     assert(d>0);
     return d;
+}
+
+void TRR::draw_TRR(ofstream& stream)
+{
+    vector<GridPoint> trr1_boundary_grid;
+    if (core.slope() > 0) {
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
+        trr1_boundary_grid.emplace_back(core.p2.x + radius, core.p2.y);
+        trr1_boundary_grid.emplace_back(core.p2.x, core.p2.y + radius);
+        trr1_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  // clock-wise
+    } else if (core.slope() < 0) {
+        trr1_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
+        trr1_boundary_grid.emplace_back(core.p2.x, core.p2.y + radius);
+        trr1_boundary_grid.emplace_back(core.p2.x - radius, core.p2.y);
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);  // clock-wise
+    } else {                                                                            // leaf node
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
+        trr1_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y + radius);
+        trr1_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  // clock-wise
+    }
+
+    plotBoxPLT(stream,
+    trr1_boundary_grid[0].x,trr1_boundary_grid[0].y,
+    trr1_boundary_grid[1].x,trr1_boundary_grid[1].y,
+    trr1_boundary_grid[2].x,trr1_boundary_grid[2].y,
+    trr1_boundary_grid[3].x,trr1_boundary_grid[3].y    
+    );
+}
+
+void TRR::draw_core(ofstream& stream)
+{
+    plotLinePLT(stream,core.p1.x,
+    core.p1.y,
+    core.p2.x,
+    core.p2.y
+    );
+}
+
+bool TRR::insideTRR(GridPoint point)
+{
+    vector<GridPoint> trr1_boundary_grid;
+    if (core.slope() > 0) {
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
+        trr1_boundary_grid.emplace_back(core.p2.x + radius, core.p2.y);
+        trr1_boundary_grid.emplace_back(core.p2.x, core.p2.y + radius);
+        trr1_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  // clock-wise
+    } else if (core.slope() < 0) {
+        trr1_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
+        trr1_boundary_grid.emplace_back(core.p2.x, core.p2.y + radius);
+        trr1_boundary_grid.emplace_back(core.p2.x - radius, core.p2.y);
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);  // clock-wise
+    } else {  // leaf node
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
+        trr1_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
+        trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y + radius);
+        trr1_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  // clock-wise
+    }
+
+    double min_x;
+    double max_x;
+    double min_y;
+    double max_y;
+    min_x=min(trr1_boundary_grid[3].x,min(trr1_boundary_grid[2].x,min(trr1_boundary_grid[0].x,trr1_boundary_grid[1].x)));
+    max_x=max(trr1_boundary_grid[3].x,max(trr1_boundary_grid[2].x,max(trr1_boundary_grid[0].x,trr1_boundary_grid[1].x)));
+    min_y=min(trr1_boundary_grid[3].y,min(trr1_boundary_grid[2].y,min(trr1_boundary_grid[0].y,trr1_boundary_grid[1].y)));
+    max_y=max(trr1_boundary_grid[3].y,max(trr1_boundary_grid[2].y,max(trr1_boundary_grid[0].y,trr1_boundary_grid[1].y)));
+
+    if(point.x>=min_x&&point.x<=max_x&&point.y>=min_y&&point.y<=max_y)
+    {
+        return true;
+    }
+    return false;
+
+}
+
+void Router::draw_TRR_pair(TRR trr1,TRR trr2)
+{
+    string outFile = _DRAWDIR+ "TRR_PAIR"+ ".plt";
+    ofstream outfile( outFile.c_str() , ios::out );
+
+    outfile << " " << endl;
+    outfile << "set terminal png size 4000,4000" << endl;
+    outfile << "set output " << "\"" << _DRAWDIR << "TRR_PAIR"<<".png\"" << endl;
+    // outfile << "set multiplot layout 1, 2" << endl;
+    outfile << "set size ratio -1" << endl;
+    outfile << "set nokey" << endl << endl;
+
+    // for(int i=0; i<cell_list_top.size(); i++){
+    //     outfile << "set label " << i + 2 << " \"" << cell_list_top[i]->get_name() << "\" at " << cell_list_top[i]->get_posX() + cell_list_top[i]->get_width() / 2 << "," << cell_list_top[i]->get_posY() + cell_list_top[i]->get_height() / 2 << " center front" << endl;
+    // }
+    // outfile << "set xrange [0:" << _pChip->get_width() << "]" << endl;
+    // outfile << "set yrange [0:" << _pChip->get_height() << "]" << endl;
+    // outfile << "plot[:][:] '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' with filledcurves closed fc \"yellow\" fs border lc \"black\", '-' w l lt 1" << endl << endl;
+
+    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' w l lt 1" << endl << endl;
+    
+    outfile << "# TRR" << endl;
+    trr1.draw_TRR(outfile);
+    trr2.draw_TRR(outfile);
+    outfile << "EOF" << endl;
+
+    outfile << "# TRR cores" << endl;
+    trr1.draw_core(outfile);
+    trr2.draw_core(outfile);
+    outfile << "EOF" << endl;
+    
+
+    // outfile << "pause -1 'Press any key to close.'" << endl;
+    outfile.close();
+
+    system(("gnuplot " + outFile).c_str());
+
+    cout << BLUE << "[Router]" << RESET << " - Visualize the TRR pair in \'" << outFile << "\'.\n";
 }

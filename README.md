@@ -29,3 +29,6 @@ $ ./run.py t1
 $ ./run.py t1 --outfile <filename>
 $ ./run.py t1 -p <benchmark path> --outfile filename
 ```
+
+## Todo
+different unit resistance and capacitance for different level

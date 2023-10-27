@@ -12,7 +12,7 @@ using namespace std;
 #define c_constraint 300 // 单位 fF
 #define LINEAR_DELAY 0
 #define ELMORE_DELAY 1
-const double eps = 1e-4;
+const double eps = 1e-3;// 1e-4 seems to large
 const double skewModifyStep = 1;
 
 class PointPair {
@@ -126,7 +126,7 @@ public:
     Segment intersect(Segment& rhs) {
         double cur_slope = slope();
         double rhs_slope = rhs.slope();
-
+        // cout<<cur_slope<<" "<<rhs_slope;
         // check if 4 points same line
         // if (abs(cur_slope - rhs_slope) < eps) {
         //     if (abs((rhs.p1.y - p1.y) * (p2.x - p1.x) - (p2.y - p1.y) * (rhs.p1.x - p1.x)) < eps) {
@@ -144,6 +144,7 @@ public:
             return ret;
         }
         if (abs(cur_slope - rhs_slope) < eps) {// equal slope
+            // cout<<" "<<(rhs.p1.y - p1.y) * (p2.x - p1.x)<<" "<<(p2.y - p1.y) * (rhs.p1.x - p1.x)<<endl;;
             if (abs((rhs.p1.y - p1.y) * (p2.x - p1.x) - (p2.y - p1.y) * (rhs.p1.x - p1.x)) < eps) {// check if 4 points same line
                 assert(rhs.p1.y <= rhs.p2.y && p1.y <= p2.y);
                 GridPoint upper, lower;
@@ -226,6 +227,7 @@ public:
     Segment intersect(Segment& seg) {
         vector<GridPoint> trr_boundary_grid;
         vector<Segment> trr_Sides;
+        //cout<<"seg slope: "<<seg.slope()<<" p1: "<<seg.p1<<" p2: "<<seg.p2<<endl;
         trr_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
         trr_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
         trr_boundary_grid.emplace_back(core.p1.x, core.p1.y + radius);
@@ -247,6 +249,12 @@ public:
         ret.id = -1;
         return ret;
     }
+
+    void draw_TRR(ofstream& stream);
+    void draw_core(ofstream& stream);
+
+    bool insideTRR(GridPoint point);
+
 };
 
 class TreeNode {
@@ -326,6 +334,7 @@ public:
     shared_ptr<TreeTopology> topo;
 
     string _RUNDIR = "../run_tmp/";
+    string _DRAWDIR= "../draw/";
 
     // Structures to store the final routing result
     GridPoint clockSource;
@@ -350,6 +359,10 @@ public:
     void writeSolution();
     void buildTopology();
     void setdelay_model(int);
+    void draw_bottom_up();
+    void draw_top_down();
+    void draw_TRR_pair(TRR trr1,TRR trr2);
+    Segment TRRintersect(TRR& trr1,TRR& trr2);
 };
 
 double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L);
@@ -373,3 +386,5 @@ void modify_coord_by_L2(double &ea, double &eb, shared_ptr<TreeNode> nodeLeft, s
 double L1Dist(GridPoint p1, GridPoint p2);
 
 double min_manhattan_dist(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight);
+
+
