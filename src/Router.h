@@ -261,6 +261,7 @@ class TreeNode {
 public:
     int id;
     int layer;
+    int tree_layer;
     double load_capacitance;// load from taps
     double delay;
     TRR trr;
@@ -297,6 +298,7 @@ public:
     void constructTree_old(bool modifyCurrentTree = false);
     void constructTree(vector<int> preOrder, vector<int> inOrder);
     void layerassignment(vector<pair<int,int>> IdAndLayer);
+    void treeLayerCal();
     int getSumOfDiameter();
     // randomly switch leaf nodes to reduce sum of diameter
     void refineStructure(int iter = 10000);

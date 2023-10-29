@@ -94,13 +94,41 @@ void TreeTopology::layerassignment(vector<pair<int, int>> IdAndLayer){
             assert(IdAndLayer[index].first==curId);
             curNode->layer=IdAndLayer[index].second;
             index++;
-            cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
+            cout<<"preing "<<curId<<" at layer "<<curNode->layer<< " at tree-layer "<<curNode->tree_layer<<endl;
             preOrderTraversal(curNode->lc,index);
             preOrderTraversal(curNode->rc,index);
         }
     };
     int index=0;
     preOrderTraversal(root,index);
+}
+
+void TreeTopology::treeLayerCal()
+{
+    std::function<void(shared_ptr<TreeNode>)> levelTraversal=[&](shared_ptr<TreeNode> curNode){
+        queue<shared_ptr<TreeNode>> nodeQueue;
+        int count=0;
+        assert(curNode!=NULL);
+        nodeQueue.emplace(curNode);
+        while(!nodeQueue.empty())
+        {
+            int size=nodeQueue.size();
+            while(size>0){   //如果当前队列的结点大小减去1仍然大于0的话
+                shared_ptr<TreeNode> cur = nodeQueue.front();
+                nodeQueue.pop();     //获取队列的第一个结点，出队列
+                cur->tree_layer=count;           //访问当前结点，可以任意改成其他打印操作等等
+                if(cur->lc!=NULL){
+                    nodeQueue.push(cur->lc);  //左孩子不为空，左孩子入队列
+                }
+                if(cur->rc!=NULL){
+                    nodeQueue.push(cur->rc);  //右孩子不为空，右孩子入队列
+                }
+                size--;
+            }
+            count++;                   //如果size不满足条件，退出内层循环，层数加一;
+        }
+    };
+    levelTraversal(root);
 }
 
 shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
@@ -743,6 +771,7 @@ void Router::buildTopology()
     topo=make_shared<TreeTopology>();
     assert(topo);
     topo->inittree(taps.size(),preOrderId.size(),preOrderId,inOrderId);
+    topo->treeLayerCal();
     topo->layerassignment(IdAndLayer);
     //exit(0);
 }
