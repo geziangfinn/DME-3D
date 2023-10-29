@@ -25,8 +25,9 @@ int main(int argc, char *argv[]){
     router.buildTopology();
     router.setdelay_model(ELMORE);
     router.DME();
-    //router.buildSolution();
-    //router.writeSolution();
+    router.buildSolution();
+    router.draw_solution();
+    router.writeSolution();
     
     cout << "End of Process" << endl;
     return 0;

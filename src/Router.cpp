@@ -133,7 +133,7 @@ void TreeTopology::treeLayerCal()
 
 shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
 {
-    if(preStart>preEnd)
+        if(preStart>preEnd)
         {
             return NULL;
         }
@@ -146,6 +146,16 @@ shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, in
 
         curRoot->lc=buildTree(pre,in,preStart+1,rootInInorder-inStart+preStart,inStart,rootInInorder-1);
         curRoot->rc=buildTree(pre,in,rootInInorder-inStart+preStart+1,preEnd,rootInInorder+1,inEnd);
+        if(curRoot->lc)
+        {
+            curRoot->lc->set_par(curRoot);
+            cout<<"I am "<<curRoot->lc->id<<" my par is "<<curRoot->id<<endl;
+        }
+        if(curRoot->rc)
+        {
+            curRoot->rc->set_par(curRoot);
+            cout<<"I am "<<curRoot->rc->id<<" my par is "<<curRoot->id<<endl;
+        }
         return curRoot;
 }
 
@@ -523,13 +533,13 @@ void Router::DME() {
     postOrderTraversal(topo->root);
     cout  << "Finish bottom-up process"  << endl;
     draw_bottom_up();
-    exit(0);
+    //exit(0);
 
     // 2. Find Exact Placement(top down)
     pl.resize(topo->size);
     sol.resize(topo->size);
-    auto& rootMS = vertexMS[topo->root->id];
-
+    //auto& rootMS = vertexMS[topo->root->id];
+    auto& rootMS=topo->root->trr.core;
     std::function<void(shared_ptr<TreeNode>)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
         int curId = curNode->id;
 
@@ -547,7 +557,8 @@ void Router::DME() {
             } else {
                 auto& par = curNode->par;
                 int parId = par->id;
-                auto& trr_par = vertexTRR[parId];
+                //auto& trr_par = vertexTRR[parId];
+                TRR trr_par;
                 trr_par.core = Segment(pl[parId], pl[parId]);
                 
                 trr_par.radius = vertexDistE[curId];
@@ -559,13 +570,16 @@ void Router::DME() {
                 // if(trr_par.radius == 122663.50){
                 //     cout << 3 << endl;
                 // }
-                Segment merged = trr_par.intersect(vertexMS[curId]);
-                // if(merged.isLeaf() == false){
+                //Segment merged = trr_par.intersect(vertexMS[curId]);
+                Segment merged = trr_par.intersect(curNode->trr.core);
+               
+                // if(merged.isLeaf() == false){    
                 //     cout << trr_par << " intersecting "<< vertexMS[curId] <<  endl;
                 //     cout << " Not leaf" <<endl;
                 //     cout << merged << endl;
                 // }
                 if (merged.id == -1) {
+                    draw_TRR_pair(trr_par,TRR(curNode->trr.core,0));
                     cout << "TRR-MS merging failed" << endl;
                     exit(1);
                 }
@@ -577,7 +591,8 @@ void Router::DME() {
             preOrderTraversal(curNode->rc);
         } else {
             // sinks
-            pl[curId] = vertexMS[curId].p1;
+            //pl[curId] = vertexMS[curId].p1;
+            pl[curId]=curNode->trr.core.p1;
             return;
         }
     };
@@ -783,7 +798,7 @@ void Router::setdelay_model(int delaymodel)
 
 void Router::draw_bottom_up()
 {
-    string outFile = _DRAWDIR+ setting.get_case_name() + ".plt";
+    string outFile = _DRAWDIR+ setting.get_case_name() + "_bottom_up.plt";
     ofstream outfile( outFile.c_str() , ios::out );
 
     outfile << " " << endl;
@@ -833,6 +848,49 @@ void Router::draw_bottom_up()
     outfile << "EOF" << endl;
     
 
+    // outfile << "pause -1 'Press any key to close.'" << endl;
+    outfile.close();
+
+    system(("gnuplot " + outFile).c_str());
+
+    cout << BLUE << "[Router]" << RESET << " - Visualize the bottom_up graph in \'" << outFile << "\'.\n";
+}
+
+void Router::draw_solution()
+{
+    string outFile = _DRAWDIR+ setting.get_case_name() + "_solution.plt";
+    ofstream outfile( outFile.c_str() , ios::out );
+
+    outfile << " " << endl;
+    outfile << "set terminal png size 4000,4000" << endl;
+    outfile << "set output " << "\"" << _DRAWDIR << setting.get_case_name()+"_solution"<<".png\"" << endl;
+    // outfile << "set multiplot layout 1, 2" << endl;
+    outfile << "set size ratio -1" << endl;
+    outfile << "set nokey" << endl << endl;
+
+    // for(int i=0; i<cell_list_top.size(); i++){
+    //     outfile << "set label " << i + 2 << " \"" << cell_list_top[i]->get_name() << "\" at " << cell_list_top[i]->get_posX() + cell_list_top[i]->get_width() / 2 << "," << cell_list_top[i]->get_posY() + cell_list_top[i]->get_height() / 2 << " center front" << endl;
+    // }
+    // outfile << "set xrange [0:" << _pChip->get_width() << "]" << endl;
+    // outfile << "set yrange [0:" << _pChip->get_height() << "]" << endl;
+    // outfile << "plot[:][:] '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' with filledcurves closed fc \"yellow\" fs border lc \"black\", '-' w l lt 1" << endl << endl;
+
+    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' w l lt 1" << endl << endl;
+    
+    outfile << "# TREE" << endl;
+    std::function<void(shared_ptr<GrSteiner>)> traceToSource = [&](shared_ptr<GrSteiner> curNode) {
+        if (curNode->par == NULL) {  // reached source
+            return;
+        }
+        auto &nxtNode = curNode->par;
+        plotLinePLT(outfile,curNode->x,curNode->y,nxtNode->x,nxtNode->y);
+        traceToSource(nxtNode);
+    };
+    for (int tapId = 0; tapId < taps.size(); tapId++) {
+        traceToSource(sol[tapId]);
+    }
+    outfile << "EOF" << endl;
+    
     // outfile << "pause -1 'Press any key to close.'" << endl;
     outfile.close();
 
@@ -1109,6 +1167,14 @@ void TRR::draw_core(ofstream& stream)
 bool TRR::insideTRR(GridPoint point)
 {
     vector<GridPoint> trr1_boundary_grid;
+    vector<Segment> trr1_Sides;
+    if(db_equal(radius,0))// when radius of TRR==0
+    {
+        Segment pointSeg=Segment(point,point);
+        Segment seg=core.intersect(pointSeg);
+        return seg.id==-2;
+    }
+
     if (core.slope() > 0) {
         trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
         trr1_boundary_grid.emplace_back(core.p2.x + radius, core.p2.y);
@@ -1119,27 +1185,35 @@ bool TRR::insideTRR(GridPoint point)
         trr1_boundary_grid.emplace_back(core.p2.x, core.p2.y + radius);
         trr1_boundary_grid.emplace_back(core.p2.x - radius, core.p2.y);
         trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);  // clock-wise
-    } else {  // leaf node
+    } else {  // core is leaf node
         trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
         trr1_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
         trr1_boundary_grid.emplace_back(core.p1.x, core.p1.y + radius);
         trr1_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  // clock-wise
     }
 
-    double min_x;
-    double max_x;
-    double min_y;
-    double max_y;
-    min_x=min(trr1_boundary_grid[3].x,min(trr1_boundary_grid[2].x,min(trr1_boundary_grid[0].x,trr1_boundary_grid[1].x)));
-    max_x=max(trr1_boundary_grid[3].x,max(trr1_boundary_grid[2].x,max(trr1_boundary_grid[0].x,trr1_boundary_grid[1].x)));
-    min_y=min(trr1_boundary_grid[3].y,min(trr1_boundary_grid[2].y,min(trr1_boundary_grid[0].y,trr1_boundary_grid[1].y)));
-    max_y=max(trr1_boundary_grid[3].y,max(trr1_boundary_grid[2].y,max(trr1_boundary_grid[0].y,trr1_boundary_grid[1].y)));
-
-    if(point.x>=min_x&&point.x<=max_x&&point.y>=min_y&&point.y<=max_y)
-    {
-        return true;
+    
+    for (int i = 0; i < 3; i++) {
+        trr1_Sides.emplace_back(trr1_boundary_grid[i], trr1_boundary_grid[i + 1]);
     }
-    return false;
+    trr1_Sides.emplace_back(trr1_boundary_grid[3], trr1_boundary_grid[0]);
+
+    vector<double> interceps;// use interceps to determine if a point is in a TRR, just like linear programming, but here all slopes of constraints are 1 or -1
+
+    for(Segment side:trr1_Sides)
+    {
+        if(side.slope()>0)
+        {
+            interceps.emplace_back(side.p1.y-side.p1.x);
+        }
+        else if(side.slope()<0)
+        {
+            interceps.emplace_back(side.p1.y+side.p1.x);
+        }
+    }
+    sort(interceps.begin(),interceps.end());
+
+    return (point.x+point.y)>=interceps[2]&&(point.x+point.y)<=interceps[3]&&(point.y-point.x)>=interceps[0]&&(point.y-point.x)<=interceps[1];
 
 }
 

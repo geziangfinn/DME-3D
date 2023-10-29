@@ -12,7 +12,7 @@ using namespace std;
 #define c_constraint 300 // 单位 fF
 #define LINEAR_DELAY 0
 #define ELMORE_DELAY 1
-const double eps = 1e-3;// 1e-4 seems to large
+const double eps = 1e-2;// 1e-4 and 1e-3 seems to large, is 1e-2 ok?
 const double skewModifyStep = 1;
 
 class PointPair {
@@ -120,7 +120,9 @@ public:
         if (p2.x == p1.x) {
             return 0;
         }
-        return 1.0 * (p1.y - p2.y) / (p1.x - p2.x);
+        double slope=1.0 * (p1.y - p2.y) / (p1.x - p2.x);
+        assert(abs(slope + 1) < 1e-6||abs(slope-1)<1e-6);
+        return slope;
     }
 
     Segment intersect(Segment& rhs) {
@@ -135,6 +137,7 @@ public:
             if (abs((rhs.p1.y - p1.y) * (p2.x - p1.x) - (p2.y - p1.y) * (rhs.p1.x - p1.x)) < eps) {// check if 4 points same line
                 // if ((rhs.p1.y - p1.y) * (p2.x - p1.x) == (p2.y - p1.y) * (rhs.p1.x - p1.x)) {
                 if (p1.y - eps <= rhs.p1.y && rhs.p1.y <= p2.y + eps) {  // valid intersection
+                    cout<<"eps check: "<<p1.x<<" "<<p1.y<<" "<<p2.x<<" "<<p2.y<<" "<<rhs.p1.x<<" "<<rhs.p1.y<<endl;
                     Segment ret = rhs;
                     ret.id = -2;  // return single point intersection
                     return ret;
@@ -224,14 +227,14 @@ public:
         os << trr.core << "; radius:" << trr.radius;
         return os;
     }
-    Segment intersect(Segment& seg) {
+    Segment intersect(Segment& seg) {//! this function is used for TRRs in top-down phase, in which all cores of TRRs are points.
         vector<GridPoint> trr_boundary_grid;
         vector<Segment> trr_Sides;
         //cout<<"seg slope: "<<seg.slope()<<" p1: "<<seg.p1<<" p2: "<<seg.p2<<endl;
         trr_boundary_grid.emplace_back(core.p1.x, core.p1.y - radius);
         trr_boundary_grid.emplace_back(core.p1.x + radius, core.p1.y);
         trr_boundary_grid.emplace_back(core.p1.x, core.p1.y + radius);
-        trr_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  // clock-wise
+        trr_boundary_grid.emplace_back(core.p1.x - radius, core.p1.y);  //counter clock-wise
         for (int i = 0; i < 3; i++) {
             trr_Sides.emplace_back(trr_boundary_grid[i], trr_boundary_grid[i + 1]);
         }
@@ -362,7 +365,7 @@ public:
     void buildTopology();
     void setdelay_model(int);
     void draw_bottom_up();
-    void draw_top_down();
+    void draw_solution();
     void draw_TRR_pair(TRR trr1,TRR trr2);
     Segment TRRintersect(TRR& trr1,TRR& trr2);
 };
