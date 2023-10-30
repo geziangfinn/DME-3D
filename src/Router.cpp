@@ -241,6 +241,9 @@ Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
     vector<Segment> trr2_Sides;
     assert(trr1.radius!=0||trr2.radius!=0);
     //if there is one trr's radius = 0
+    //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    //todo: what if a core is a leaf and its radius is 0? judge if its in a trr, but we didn't run into this case?
+    //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if(trr1.radius==0||trr2.radius==0)
     {
         if(trr1.radius==0)
@@ -340,6 +343,7 @@ Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
         ret.id = -1;
         return ret;
     }
+    //cout<<"radius check*******888\n";
     // if both trr's radius > 0
     if (trr1.core.slope() > 0) {
         trr1_boundary_grid.emplace_back(trr1.core.p1.x, trr1.core.p1.y - trr1.radius);
@@ -394,15 +398,27 @@ Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
     // }
 
     // for 4*4 check intersect
+    Segment tempseg;
+    tempseg.id=-1;
     for (auto& seg1 : trr1_Sides) {
         for (auto& seg2 : trr2_Sides) {
             //cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
             Segment seg = seg1.intersect(seg2);
-            if (seg.id == 0||seg.id==-2) {
+            if (seg.id == 0) {
                 return seg;
+            }
+            if (seg.id==-2)
+            {
+                tempseg=seg;
             }
         }
     }
+
+    if(tempseg.id==-2)
+    {
+        return tempseg;
+    }
+
     cout << "Cannot find intersection between two TRRs" << endl;
     Segment ret;
     draw_TRR_pair(trr1,trr2);
@@ -607,7 +623,7 @@ void Router::route() {
     DME();
 }
 bool db_equal(double a, double b) { return abs(a - b) < eps; }
-void Router::buildSolution() {
+void Router::buildSolution() { //! consider snaking now! so we don't simply use L-shape any more
     // preorder traversal to buil grsteiner structure
     std::function<void(shared_ptr<TreeNode>)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
         int curId = curNode->id;
@@ -627,6 +643,7 @@ void Router::buildSolution() {
                 lcSteiner->set_par(middle);
                 middle->set_par(curSteiner);
             }
+            // Connect rc
             if (db_equal(curSteiner->x, rcSteiner->x) || db_equal(curSteiner->y, rcSteiner->y)) {
                 rcSteiner->set_par(curSteiner);
             } else {  // Use L-shape
@@ -815,7 +832,7 @@ void Router::draw_bottom_up()
     // outfile << "set yrange [0:" << _pChip->get_height() << "]" << endl;
     // outfile << "plot[:][:] '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' with filledcurves closed fc \"yellow\" fs border lc \"black\", '-' w l lt 1" << endl << endl;
 
-    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' w l lt 1" << endl << endl;
+    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-'  w l lt 7 lw 16, '-' w p pt 7 ps 6 " << endl << endl;
     
     outfile << "# TRR" << endl;
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
@@ -841,12 +858,25 @@ void Router::draw_bottom_up()
             curNode->trr.draw_core(outfile);
             return;
         } else {
-            curNode->trr.draw_core(outfile);
+            //curNode->trr.draw_core(outfile);
         }
     };
     postOrderTraversal_core(topo->root);
     outfile << "EOF" << endl;
     
+    outfile << "# Sinks"<<endl;
+        std::function<void(shared_ptr<TreeNode>)> postOrderTraversal_sink = [&](shared_ptr<TreeNode> curNode) {
+        int curId = curNode->id;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            postOrderTraversal_sink(curNode->lc);
+            postOrderTraversal_sink(curNode->rc);
+            return;
+        } else {
+            curNode->trr.draw_core(outfile);
+        }
+    };
+    postOrderTraversal_sink(topo->root);
+    outfile << "EOF" << endl;
 
     // outfile << "pause -1 'Press any key to close.'" << endl;
     outfile.close();
@@ -875,7 +905,7 @@ void Router::draw_solution()
     // outfile << "set yrange [0:" << _pChip->get_height() << "]" << endl;
     // outfile << "plot[:][:] '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' with filledcurves closed fc \"yellow\" fs border lc \"black\", '-' w l lt 1" << endl << endl;
 
-    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' w l lt 1" << endl << endl;
+    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' w p pt 7 ps 6, '-' w p pt 5 ps 7 " << endl << endl;
     
     outfile << "# TREE" << endl;
     std::function<void(shared_ptr<GrSteiner>)> traceToSource = [&](shared_ptr<GrSteiner> curNode) {
@@ -890,6 +920,24 @@ void Router::draw_solution()
         traceToSource(sol[tapId]);
     }
     outfile << "EOF" << endl;
+
+    outfile << "# Sinks"<<endl;
+        std::function<void(shared_ptr<TreeNode>)> postOrderTraversal_sink = [&](shared_ptr<TreeNode> curNode) {
+        int curId = curNode->id;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            postOrderTraversal_sink(curNode->lc);
+            postOrderTraversal_sink(curNode->rc);
+            return;
+        } else {
+            curNode->trr.draw_core(outfile);
+        }
+    };
+    postOrderTraversal_sink(topo->root);
+    outfile << "EOF" << endl;
+
+    outfile << "# Source"<<endl;
+    plotLinePLT(outfile,topo->root->trr.core.p1.x,topo->root->trr.core.p1.y,topo->root->trr.core.p1.x,topo->root->trr.core.p1.y);
+    outfile<< "EOF"<< endl;
     
     // outfile << "pause -1 'Press any key to close.'" << endl;
     outfile.close();

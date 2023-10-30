@@ -125,14 +125,23 @@ public:
         return slope;
     }
 
-    Segment intersect(Segment& rhs) {
+    Segment intersect(Segment rhs) {
         double cur_slope = slope();
         double rhs_slope = rhs.slope();
         // cout<<cur_slope<<" "<<rhs_slope;
         // check if 4 points same line
         // if (abs(cur_slope - rhs_slope) < eps) {
         //     if (abs((rhs.p1.y - p1.y) * (p2.x - p1.x) - (p2.y - p1.y) * (rhs.p1.x - p1.x)) < eps) {
-        if (rhs.isLeaf()) {  // if current segment is intersecting a single grid point
+        assert(!(rhs.isLeaf()&&this->isLeaf()));
+
+        if (rhs.isLeaf()||this->isLeaf()) {  // if current segment is intersecting a single grid point, or current segment is a point!(happend in top down phase)
+            if(this->isLeaf())
+            {
+                Segment swap;
+                swap=*this;
+                *this=rhs;
+                rhs=swap;
+            }
             Segment ret = rhs;
             if (abs((rhs.p1.y - p1.y) * (p2.x - p1.x) - (p2.y - p1.y) * (rhs.p1.x - p1.x)) < eps) {// check if 4 points same line
                 // if ((rhs.p1.y - p1.y) * (p2.x - p1.x) == (p2.y - p1.y) * (rhs.p1.x - p1.x)) {
@@ -227,7 +236,7 @@ public:
         os << trr.core << "; radius:" << trr.radius;
         return os;
     }
-    Segment intersect(Segment& seg) {//! this function is used for TRRs in top-down phase, in which all cores of TRRs are points.
+    Segment intersect(Segment& seg) {//! this function is used for TRRs in top-down phase, in which all cores of TRRs are points. And only intersection point is used, which means ignore the other points on ms(v)
         vector<GridPoint> trr_boundary_grid;
         vector<Segment> trr_Sides;
         //cout<<"seg slope: "<<seg.slope()<<" p1: "<<seg.p1<<" p2: "<<seg.p2<<endl;
@@ -242,12 +251,14 @@ public:
         // for (auto& seg1 : trr_Sides) {
         //     cout << seg1 << endl;
         // }
+        cout<<"\ntop-dwon\n";
         for (auto& side : trr_Sides) {
             Segment intersection = side.intersect(seg);
             if (intersection.id != -1) {
                 return intersection;
             }
         }
+
         Segment ret;
         ret.id = -1;
         return ret;
