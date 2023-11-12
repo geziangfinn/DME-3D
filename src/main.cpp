@@ -24,6 +24,8 @@ int main(int argc, char *argv[]){
     //exit(0);
     router.buildTopology();
     router.setdelay_model(ELMORE);
+    router.metalLayerCal();
+    router.initiate_parameters();
     router.DME();
     router.buildSolution();
     router.draw_solution();

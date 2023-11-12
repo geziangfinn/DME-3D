@@ -1,19 +1,25 @@
 #pragma once
 #include "global.h"
 using namespace std;
-#define c_w 0.0002
-#define c_v 15.48
-#define r_w 0.0001
-#define r_v 0.035
-#define c_w_standard c_w/1000000000000000 // 单位F/nm
+//#define c_w 0.0002
+#define c_v 372.5
+//#define r_w 0.0001
+#define r_v 0.01628
+//#define c_w_standard c_w/1000000000000000 // 单位F/nm
 #define c_v_standard c_v/1000000000000000 // 单位F
-#define l_w 0.0000000000000018 // 单位H/nm
-#define l_v 0.000000000013827 // 单位H
+//#define l_w 0.0000000000000018 // 单位H/nm
+#define l_v 0.00000000001088 // 单位H
 #define c_constraint 300 // 单位 fF
 #define LINEAR_DELAY 0
 #define ELMORE_DELAY 1
-const double eps = 1e-2;// 1e-4 and 1e-3 seems to large, is 1e-2 ok?
+const double eps = 1e-1;// 1e-4 and 1e-3 seems to large, is 1e-2 ok?
 const double skewModifyStep = 1;
+
+struct metal{
+    double cw;
+    double rw;
+    double lw;
+};
 
 class PointPair {
     // V_{i,k,n}
@@ -236,6 +242,12 @@ public:
         os << trr.core << "; radius:" << trr.radius;
         return os;
     }
+    
+    void draw_TRR(ofstream& stream);
+    void draw_core(ofstream& stream);
+
+    bool insideTRR(GridPoint point);
+
     Segment intersect(Segment& seg) {//! this function is used for TRRs in top-down phase, in which all cores of TRRs are points. And only intersection point is used, which means ignore the other points on ms(v)
         vector<GridPoint> trr_boundary_grid;
         vector<Segment> trr_Sides;
@@ -258,16 +270,18 @@ public:
                 return intersection;
             }
         }
+        if(insideTRR(seg.p1)&&insideTRR(seg.p2))
+        {
+            Segment ret=seg;
+            ret.id=-2;
+            return ret;
+        }
 
         Segment ret;
         ret.id = -1;
         return ret;
     }
 
-    void draw_TRR(ofstream& stream);
-    void draw_core(ofstream& stream);
-
-    bool insideTRR(GridPoint point);
 
 };
 
@@ -278,6 +292,7 @@ public:
     int tree_layer;
     double load_capacitance;// load from taps
     double delay;
+    int metal_layer_index;// for non-leaf tree nodes, assign the metal used to connect a tree node to its children
     TRR trr;
     shared_ptr<TreeNode> lc;
     shared_ptr<TreeNode> rc;
@@ -349,6 +364,7 @@ public:
     vector<double> vertexDistE;
     shared_ptr<TreeTopology> topo;
 
+    vector<metal> metals;
     string _RUNDIR = "../run_tmp/";
     string _DRAWDIR= "../draw/";
 
@@ -357,7 +373,8 @@ public:
     vector<GridPoint> pl;
     vector<shared_ptr<GrSteiner>> sol;
         // vector<vector<GridPoint>> sol;
-
+    int chip_layer_number=2;// default: 2 layers, the following implementation is for multilayers, in case of potential extension in the future
+    int metal_layer_number=4;// default: 4 layers, the following implementation is for arbitrary metal layer number, in case of potential extension in the future
     void init();
     void readInput();
     // To generate topology(try L1 based metric and L2 based ones)
@@ -378,26 +395,22 @@ public:
     void draw_bottom_up();
     void draw_solution();
     void draw_TRR_pair(TRR trr1,TRR trr2);
+    void bouncing_check();
     Segment TRRintersect(TRR& trr1,TRR& trr2);
+    double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L);
+    double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag);
+    void update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb);
+    void update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb);
+    double calc_standard_Capacitance(double capacitance_in_fF);
+    float calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeChild, float WL);
+    void RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double &ea, double &eb);
+    void modify_coord_by_L1(double &ea, double &eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x);
+    void modify_coord_by_L2(double &ea, double &eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x);
+    void initiate_parameters();
+    void metalLayerCal();
 };
 
-double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L);
 
-double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag);
-
-void update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb);
-
-void update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb);
-
-double calc_standard_Capacitance(double capacitance_in_fF);
-
-float calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeChild, float WL);
-
-void RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double &ea, double &eb);
-
-void modify_coord_by_L1(double &ea, double &eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x);
-
-void modify_coord_by_L2(double &ea, double &eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x);
 
 double L1Dist(GridPoint p1, GridPoint p2);
 

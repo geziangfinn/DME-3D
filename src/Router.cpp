@@ -79,7 +79,7 @@ void TreeTopology::constructTree(vector<int> preOrder, vector<int> inOrder)
             postOrderTraversal(curNode->lc);
             postOrderTraversal(curNode->rc);
             int curId = curNode->id;
-            cout<<"Vis: "<<curId<<endl;
+            //cout<<"Vis: "<<curId<<endl;
             //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
         }
     };
@@ -94,7 +94,7 @@ void TreeTopology::layerassignment(vector<pair<int, int>> IdAndLayer){
             assert(IdAndLayer[index].first==curId);
             curNode->layer=IdAndLayer[index].second;
             index++;
-            cout<<"preing "<<curId<<" at layer "<<curNode->layer<< " at tree-layer "<<curNode->tree_layer<<endl;
+            // cout<<"preing "<<curId<<" at layer "<<curNode->layer<< " at tree-layer "<<curNode->tree_layer<<endl;
             preOrderTraversal(curNode->lc,index);
             preOrderTraversal(curNode->rc,index);
         }
@@ -107,7 +107,7 @@ void TreeTopology::treeLayerCal()
 {
     std::function<void(shared_ptr<TreeNode>)> levelTraversal=[&](shared_ptr<TreeNode> curNode){
         queue<shared_ptr<TreeNode>> nodeQueue;
-        int count=0;
+        int count=1;
         assert(curNode!=NULL);
         nodeQueue.emplace(curNode);
         while(!nodeQueue.empty())
@@ -117,6 +117,7 @@ void TreeTopology::treeLayerCal()
                 shared_ptr<TreeNode> cur = nodeQueue.front();
                 nodeQueue.pop();     //获取队列的第一个结点，出队列
                 cur->tree_layer=count;           //访问当前结点，可以任意改成其他打印操作等等
+                //cout<<cur->id<<" "<<cur->tree_layer<<endl;
                 if(cur->lc!=NULL){
                     nodeQueue.push(cur->lc);  //左孩子不为空，左孩子入队列
                 }
@@ -149,12 +150,12 @@ shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, in
         if(curRoot->lc)
         {
             curRoot->lc->set_par(curRoot);
-            cout<<"I am "<<curRoot->lc->id<<" my par is "<<curRoot->id<<endl;
+            //cout<<"I am "<<curRoot->lc->id<<" my par is "<<curRoot->id<<endl;
         }
         if(curRoot->rc)
         {
             curRoot->rc->set_par(curRoot);
-            cout<<"I am "<<curRoot->rc->id<<" my par is "<<curRoot->id<<endl;
+            //cout<<"I am "<<curRoot->rc->id<<" my par is "<<curRoot->id<<endl;
         }
         return curRoot;
 }
@@ -291,7 +292,13 @@ Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
                 }
 
             }
-
+            if(trr2.insideTRR(trr1.core.p1)&&trr2.insideTRR(trr1.core.p2))
+            {
+                Segment trr1core(trr1.core);
+                trr1core.id=-2;
+                return trr1core;
+            }
+            cout<<endl<<trr2.insideTRR(trr1.core.p1)<<" ff "<<trr2.insideTRR(trr1.core.p2)<<endl;
         }
         else{
             if (trr1.core.slope() > 0) {
@@ -336,10 +343,23 @@ Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
                 }
 
             }
-
+            if(trr1.insideTRR(trr2.core.p1)&&trr1.insideTRR(trr2.core.p2))
+            {
+                Segment trr2core(trr2.core);
+                trr2core.id=-2;
+                return trr2core;
+            }
+            cout<<endl<<trr1.insideTRR(trr2.core.p1)<<" gg "<<trr1.insideTRR(trr2.core.p2)<<endl;
         }
-        
+        cout << "Cannot find intersection between two TRRs" << endl;
         Segment ret;
+        draw_TRR_pair(trr1,trr2);
+        // for (auto& seg1 : trr1_Sides) {
+        //     for (auto& seg2 : trr2_Sides) {
+        //         cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
+        //         Segment seg = seg1.intersect(seg2);
+        //     }
+        // }
         ret.id = -1;
         return ret;
     }
@@ -422,12 +442,12 @@ Segment Router::TRRintersect(TRR& trr1, TRR& trr2) {
     cout << "Cannot find intersection between two TRRs" << endl;
     Segment ret;
     draw_TRR_pair(trr1,trr2);
-    for (auto& seg1 : trr1_Sides) {
-        for (auto& seg2 : trr2_Sides) {
-            cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
-            Segment seg = seg1.intersect(seg2);
-        }
-    }
+    // for (auto& seg1 : trr1_Sides) {
+    //     for (auto& seg2 : trr2_Sides) {
+    //         cout<<"seg1: "<<seg1<<"seg2: "<<seg2<<endl;
+    //         Segment seg = seg1.intersect(seg2);
+    //     }
+    // }
     ret.id = -1;
     return ret;
 }
@@ -440,7 +460,8 @@ void Router::DME() {
     // cout << seg1.intersect(seg2) << endl;
     // exit(1);
     cout << BLUE << "[Router]" << RESET<<" begin DME\n";
-
+    cout<<endl<<topo->size<<endl;
+    //exit(0);
     vertexMS.resize(topo->size);
     vertexTRR.resize(topo->size);
     vertexDistE.resize(topo->size);
@@ -453,7 +474,6 @@ void Router::DME() {
         if (curNode->lc != NULL && curNode->rc != NULL) {//!的确不会有只有一个子节点的中间节点
             postOrderTraversal(curNode->lc);
             postOrderTraversal(curNode->rc);
-
             // create merging segment for curNode
             //auto& ms_a = vertexMS[curNode->lc->id];
             //auto& ms_b = vertexMS[curNode->rc->id];
@@ -524,6 +544,9 @@ void Router::DME() {
             Segment ms_v = TRRintersect(curNode->lc->trr, curNode->rc->trr);
             // cout << "Merging result: " << ms_v << endl;
             if (ms_v.id == -1) {
+                cout<<ms_v<<endl;
+                cout<<curNode->lc->trr<<endl;
+                cout<<curNode->rc->trr<<endl;
                 cout << "Merge failure" << endl;
                 exit(1);
             }
@@ -599,7 +622,7 @@ void Router::DME() {
                     cout << "TRR-MS merging failed" << endl;
                     exit(1);
                 }
-                pl[curId] = merged.p1;
+                pl[curId] = merged.p1;//? why p1? its said that whatever point on ms is ok
             }
 
             cout << "Steiner Point " << curId << " located at " << pl[curId] << endl;
@@ -690,7 +713,7 @@ void Router::buildSolution() { //! consider snaking now! so we don't simply use 
 
 
 void Router::writeSolution() {
-    ofstream fout(setting.output_file_name);
+    ofstream fout(setting.output_file_name+setting.get_case_name());
     if (fout.fail()) {
         cout << "Fail to open file:" << setting.output_file_name << endl;
         exit(1);
@@ -803,8 +826,8 @@ void Router::buildTopology()
     topo=make_shared<TreeTopology>();
     assert(topo);
     topo->inittree(taps.size(),preOrderId.size(),preOrderId,inOrderId);
-    topo->treeLayerCal();
     topo->layerassignment(IdAndLayer);
+    topo->treeLayerCal();
     //exit(0);
 }
 
@@ -947,7 +970,11 @@ void Router::draw_solution()
     cout << BLUE << "[Router]" << RESET << " - Visualize the bottom_up graph in \'" << outFile << "\'.\n";
 }
 
-double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L){
+double Router::calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L){
+    metal merge_metal=metals[nodeMerge->metal_layer_index];
+    
+    double r_w=merge_metal.rw;
+    double c_w=merge_metal.cw;
     double beta = r_v * (abs(nodeRight->layer - nodeMerge->layer)*nodeRight->load_capacitance -
                         abs(nodeMerge->layer - nodeLeft->layer)*nodeLeft->load_capacitance +
                         0.5*c_v*(pow((nodeRight->layer - nodeMerge->layer),2) -
@@ -958,8 +985,11 @@ double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, 
     return x;
 }
 
-double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag){
+double Router::calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag){
     double alpha, beta, up;
+    metal merge_metal=metals[nodeMerge->metal_layer_index];
+    double r_w=merge_metal.rw;
+    double c_w=merge_metal.cw;
     //tag = 0: |eb| = L'
     //tag = 1: |ea| = L'
     if(tag == 0){
@@ -982,7 +1012,10 @@ double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight,
     return up/(r_w * c_w);
 }
 
-void update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb){
+void Router::update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb){
+    metal merge_metal=metals[nodeMerge->metal_layer_index];
+    double r_w=merge_metal.rw;
+    double c_w=merge_metal.cw;
     float delta_C = nodeLeft->load_capacitance + nodeRight->load_capacitance + c_w*(ea + eb) + c_v*(abs(nodeRight->layer - nodeLeft->layer));
     //考虑了buffer insertion的电容update
     if(delta_C > c_constraint){
@@ -993,7 +1026,10 @@ void update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNod
     nodeMerge->load_capacitance = delta_C;
 }
 
-void update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb){
+void Router::update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double ea, double eb){
+    metal merge_metal=metals[nodeMerge->metal_layer_index];
+    double r_w=merge_metal.rw;
+    double c_w=merge_metal.cw;
     float delta_delay = nodeLeft->delay + 0.695 * (
             0.5 * r_w * c_w * ea * ea +
             r_w * (nodeLeft->load_capacitance + c_v * abs(nodeMerge->layer - nodeLeft->layer)) * ea +
@@ -1021,13 +1057,19 @@ void update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nod
         nodeMerge->delay = delta_delay_right;
 }
 
-double calc_standard_Capacitance(double capacitance_in_fF){
+double Router::calc_standard_Capacitance(double capacitance_in_fF){
     return (capacitance_in_fF/1000000000000000);
 }
 
-float calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeChild, float WL){// ta calculation
+float Router::calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeChild, float WL){// ta calculation
     float t_pdi, theta, omega, numerator, denominator, elmore;
     float wireLength = WL;
+    metal merge_metal=metals[nodeMerge->metal_layer_index];
+    double r_w=merge_metal.rw;
+    double c_w=merge_metal.cw;
+    double l_w=merge_metal.lw;
+
+    double c_w_standard=c_w/1000000000000000;
     if(wireLength == 0)
         return 0;
     //如果两节点中间没有TSV
@@ -1046,26 +1088,42 @@ float calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeCh
     omega = 1/denominator;
     elmore = 0.695 * numerator;
     //将单位换算回ps
-    t_pdi = roundf(1000000000000000 * (  (1.047 * exp((-1)*theta/0.85))/omega + elmore  ));
+    t_pdi = roundf(1000000000000000 * (  (1.047 * exp((-1)*theta/0.85))/omega + elmore));
     //printf("before : %f\n", 1000000000000000 * (  (1.047 * exp((-1)*theta/0.85))/omega));
     return t_pdi;
 }
 
-void RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double& ea, double& eb){
+void Router::RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, double& ea, double& eb){
     float t_a, t_b;
     //! ea for left and eb for right
     t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
     t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
     //需要考虑extra wirelength存在的情况。但是尽量不要引入额外的线长。
-    while(fabs(t_a + nodeLeft->delay - (t_b + nodeRight->delay)) >= 1){//? >=1?
+    cout<<"Iterating...."<<endl;
+    int count=0;
+    while(fabs(t_a + nodeLeft->delay - (t_b + nodeRight->delay)) > 1){//? >=1?    
+        count++;
         if(t_a + nodeLeft->delay > t_b + nodeRight->delay)// ? does this gurantee that ea>eb?
+        {
+            //assert(ea>=eb);
             modify_coord_by_L1(ea, eb, nodeLeft, nodeRight, skewModifyStep);
+        }
         else
+        {
+            //assert(ea<=eb);
             modify_coord_by_L2(ea, eb, nodeLeft, nodeRight, skewModifyStep);// ? does this gurantee that eb>ea?
+        }
 
         t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
         t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
+        if(count>10000000)
+        {
+            cout<<endl<<"t_a + nodeLeft->delay: "<<t_a + nodeLeft->delay<<endl;
+            cout<<endl<<"t_b + nodeRight->delay: "<<t_b + nodeRight->delay<<endl;
+        }
+
     }
+    cout<<"Iteration done"<<endl;
     //printf("原本的 delay: left: %f, right: %f\n", nodeLeft->delay, nodeRight->delay);
     printf("left: %f, right: %f\n t_a: %f, t_b: %f\n total left: %f, total right: %f\n", nodeLeft->delay, nodeRight->delay, t_a, t_b, t_a+nodeLeft->delay, t_b + nodeRight->delay);
     t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
@@ -1081,7 +1139,7 @@ void RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode> nodeLe
 }
 
 //delay_a > delay_b, ea -= x/2, eb+= x/2
-void modify_coord_by_L1(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
+void Router::modify_coord_by_L1(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
     double min_manhattan=min_manhattan_dist(nodeLeft,nodeRight); 
 
     assert(ea!=0||eb!=0);
@@ -1102,7 +1160,8 @@ void modify_coord_by_L1(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, s
     }
     else if(ea==0)
     {
-        cout<<"should eb has extra wirelength?\n";
+        //cout<<"should eb has extra wirelength?\n";
+        eb+=x;
     }
     else if(eb==0)
     {
@@ -1121,7 +1180,7 @@ void modify_coord_by_L1(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, s
 }
 
 //delay_a < delay_b, ea += x/2, eb -= x/2
-void modify_coord_by_L2(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
+void Router::modify_coord_by_L2(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, float x){
     assert(nodeLeft!=NULL||nodeRight!=NULL);
     double min_manhattan=min_manhattan_dist(nodeLeft,nodeRight); 
 
@@ -1143,7 +1202,8 @@ void modify_coord_by_L2(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, s
     }
     else if(eb==0)
     {
-        cout<<"should ea has extra wirelength?\n";
+        //cout<<"should ea has extra wirelength?\n";
+        ea+=x;
     }
     else if(ea==0)
     {
@@ -1159,6 +1219,82 @@ void modify_coord_by_L2(double& ea, double& eb, shared_ptr<TreeNode> nodeLeft, s
         }
     }
     // if one node already has extra wirelength(must be ea??? or add assert?)
+}
+
+void Router::initiate_parameters()
+{
+    // cw: fF/nm
+    // rw: o/nm
+    metal dummy;
+    metals.emplace_back(dummy);
+
+    metal global_metal;
+    global_metal.cw=0.000283;
+    global_metal.rw=0.000011;
+    global_metal.lw=0.000000000000013265;
+    metals.emplace_back(global_metal);
+
+    metal semi_global_metal;
+    semi_global_metal.cw=0.000265;
+    semi_global_metal.rw=0.000053;
+    semi_global_metal.lw=0.0000000000000132958;
+    metals.emplace_back(semi_global_metal);
+
+    metal intermidiate_metal;
+    intermidiate_metal.cw=0.000265;
+    intermidiate_metal.rw=0.000429;
+    intermidiate_metal.lw=0.0000000000000135098;
+    metals.emplace_back(intermidiate_metal);
+
+    metal local_metal;
+    local_metal.cw=0.000267;
+    local_metal.rw=0.001714;
+    local_metal.lw=0.0000000000000135098;
+    metals.emplace_back(local_metal);
+}
+
+void Router::metalLayerCal()
+{
+    vector<vector<shared_ptr<TreeNode>>> treeNodes(chip_layer_number+1);// layer index starts from 1 rather than 0;
+
+    std::function<void(shared_ptr<TreeNode>)> levelTraversal_Metal_Assignment=[&](shared_ptr<TreeNode> curNode){
+        queue<shared_ptr<TreeNode>> nodeQueue;
+        int count=0;
+        assert(curNode!=NULL);
+        nodeQueue.emplace(curNode);
+        while(!nodeQueue.empty())
+        {
+                shared_ptr<TreeNode> cur = nodeQueue.front();
+                nodeQueue.pop();     //获取队列的第一个结点，出队列
+
+                if(cur->lc&&cur->rc){
+                    treeNodes[cur->layer].emplace_back(cur);
+                }
+
+                if(cur->lc!=NULL){
+                    nodeQueue.push(cur->lc);  //左孩子不为空，左孩子入队列
+                }
+                if(cur->rc!=NULL){
+                    nodeQueue.push(cur->rc);  //右孩子不为空，右孩子入队列
+                }
+        }
+    };
+
+    levelTraversal_Metal_Assignment(this->topo->root);
+    for(int i=1;i<=chip_layer_number;i++)
+    {
+        if(treeNodes[i].empty())
+        {
+            continue;
+        }
+        int deepest_tree_layer=treeNodes[i].back()->tree_layer;
+        for(shared_ptr<TreeNode> cur:treeNodes[i])
+        {
+            cur->metal_layer_index=ceil((double(cur->tree_layer)/double(deepest_tree_layer))*double(metal_layer_number));//! metal layer index starts from 1 rather than 0;
+            // cout<<(double(cur->tree_layer)/double(deepest_tree_layer))*double(metal_layer_number)<<endl;
+            // cout<<cur->metal_layer_index<<endl;
+        }
+    }
 }
 
 double L1Dist(GridPoint p1, GridPoint p2) { return abs(p1.x - p2.x) + abs(p1.y - p2.y); }
@@ -1246,22 +1382,23 @@ bool TRR::insideTRR(GridPoint point)
     }
     trr1_Sides.emplace_back(trr1_boundary_grid[3], trr1_boundary_grid[0]);
 
-    vector<double> interceps;// use interceps to determine if a point is in a TRR, just like linear programming, but here all slopes of constraints are 1 or -1
-
+    vector<double> negtive_slope_interceps;// use interceps to determine if a point is in a TRR, just like linear programming, but here all slopes of constraints are 1 or -1
+    vector<double> positive_slope_interceps;
     for(Segment side:trr1_Sides)
     {
         if(side.slope()>0)
         {
-            interceps.emplace_back(side.p1.y-side.p1.x);
+            positive_slope_interceps.emplace_back(side.p1.y-side.p1.x);
         }
         else if(side.slope()<0)
         {
-            interceps.emplace_back(side.p1.y+side.p1.x);
+            negtive_slope_interceps.emplace_back(side.p1.y+side.p1.x);
         }
     }
-    sort(interceps.begin(),interceps.end());
+    sort(positive_slope_interceps.begin(),positive_slope_interceps.end()); 
+    sort(negtive_slope_interceps.begin(),negtive_slope_interceps.end());
 
-    return (point.x+point.y)>=interceps[2]&&(point.x+point.y)<=interceps[3]&&(point.y-point.x)>=interceps[0]&&(point.y-point.x)<=interceps[1];
+    return (point.x+point.y)>=negtive_slope_interceps[0]&&(point.x+point.y)<=negtive_slope_interceps[1]&&(point.y-point.x)>=positive_slope_interceps[0]&&(point.y-point.x)<=positive_slope_interceps[1];
 
 }
 
@@ -1303,4 +1440,40 @@ void Router::draw_TRR_pair(TRR trr1,TRR trr2)
     system(("gnuplot " + outFile).c_str());
 
     cout << BLUE << "[Router]" << RESET << " - Visualize the TRR pair in \'" << outFile << "\'.\n";
+}
+
+void Router::bouncing_check()
+{
+    int transitionnumber=0;
+    std::function<void(shared_ptr<TreeNode>)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+        if(curNode!=nullptr){
+            int curId = curNode->id;
+            if(curNode->par)
+            {
+                if(curNode->layer!=curNode->par->layer)
+                {
+                    transitionnumber++;
+                }
+            }
+
+            cout<<"preing "<<curId<<" at layer "<<curNode->layer<< " at tree-layer "<<curNode->tree_layer<<endl;
+            if(!curNode->lc&&!curNode->rc){
+            cout<<"bouncing check: "<<transitionnumber<<endl;
+            if(transitionnumber==2)
+            {
+                exit(0);
+            }
+            transitionnumber=0;
+            
+            }
+            preOrderTraversal(curNode->lc);
+            preOrderTraversal(curNode->rc);
+        
+        }
+
+
+    };
+    int index=0;
+    preOrderTraversal(this->topo->root);
+    
 }
