@@ -960,7 +960,7 @@ void Router::buildSolution_ISPD()
 
 
 void Router::writeSolution() {
-    ofstream fout(setting.output_file_name+setting.get_case_name());
+    ofstream fout(setting.output_file_name+"/"+setting.get_case_name());
     if (fout.fail()) {
         cout << "Fail to open file:" << setting.output_file_name << endl;
         exit(1);
