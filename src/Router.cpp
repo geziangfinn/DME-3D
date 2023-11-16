@@ -13,12 +13,12 @@ using std::setprecision;
 #define eps 1e-6
 const string padding(30, '=');
 
-void TreeTopology::inittree(int leafNum, int sz, vector<int> preOrder, vector<int> inOrder) {
-    leafNumber = leafNum;
+void TreeTopology::inittree(vector<TAP> taps, int sz, vector<int> preOrder, vector<int> inOrder) {
+    leafNumber = taps.size();
     size = sz;
-    cout << "Initialize topo: " << leafNum << " leaves and " << sz << " nodes in total" << endl;
+    cout << "Initialize topo: " << leafNumber << " leaves and " << sz << " nodes in total" << endl;
     //constructTree(true);
-    constructTree(preOrder,inOrder);
+    constructTree(taps,preOrder,inOrder);
 }
 void TreeTopology::constructTree_old(bool modifyCurrentTree) {
     vector<vector<int>> DAG(size);
@@ -70,9 +70,9 @@ void TreeTopology::constructTree_old(bool modifyCurrentTree) {
     }
 }
 
-void TreeTopology::constructTree(vector<int> preOrder, vector<int> inOrder)
+void TreeTopology::constructTree(vector<TAP> taps, vector<int> preOrder, vector<int> inOrder)
 {
-    root=buildTree(preOrder,inOrder,0,preOrder.size()-1,0,inOrder.size()-1);
+    root=buildTree(taps,preOrder,inOrder,0,preOrder.size()-1,0,inOrder.size()-1);
 
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
          if(curNode!=nullptr){
@@ -132,21 +132,25 @@ void TreeTopology::treeLayerCal()
     levelTraversal(root);
 }
 
-shared_ptr<TreeNode> TreeTopology::buildTree(vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
+shared_ptr<TreeNode> TreeTopology::buildTree(vector<TAP> taps, vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
 {
         if(preStart>preEnd)
         {
             return NULL;
         }
+        int leafnumber=taps.size();
         auto curRoot=make_shared<TreeNode>(pre[preStart]);
         id_treeNode[pre[preStart]] = curRoot;
-
+        if(curRoot->id<leafnumber)
+        {
+            curRoot->load_capacitance=taps[curRoot->id].capacitance;
+        }
         int rootInInorder=inStart;
 
         while (rootInInorder < inEnd && pre[preStart] != in[rootInInorder]) rootInInorder++;
 
-        curRoot->lc=buildTree(pre,in,preStart+1,rootInInorder-inStart+preStart,inStart,rootInInorder-1);
-        curRoot->rc=buildTree(pre,in,rootInInorder-inStart+preStart+1,preEnd,rootInInorder+1,inEnd);
+        curRoot->lc=buildTree(taps,pre,in,preStart+1,rootInInorder-inStart+preStart,inStart,rootInInorder-1);
+        curRoot->rc=buildTree(taps,pre,in,rootInInorder-inStart+preStart+1,preEnd,rootInInorder+1,inEnd);
         if(curRoot->lc)
         {
             curRoot->lc->set_par(curRoot);
@@ -175,6 +179,7 @@ void Router::readInput() {
     for(sink sink:sinks)
     {
         taps.emplace_back(tap_id, sink.x, sink.y,sink.layer,sink.capacitance);
+        assert(sink.capacitance<=c_constraint);
         tap_id++;
     }
     cout.setf(ios::fixed,ios::floatfield);
@@ -625,7 +630,7 @@ void Router::DME() {
                 pl[curId] = merged.p1;//? why p1? its said that whatever point on ms is ok
             }
 
-            cout << "Steiner Point " << curId << " located at " << pl[curId] << endl;
+            // cout << "Steiner Point " << curId << " located at " << pl[curId] << endl;
             preOrderTraversal(curNode->lc);
             preOrderTraversal(curNode->rc);
         } else {
@@ -646,7 +651,7 @@ void Router::route() {
     DME();
 }
 bool db_equal(double a, double b) { return abs(a - b) < eps; }
-void Router::buildSolution() { //! consider snaking now! so we don't simply use L-shape any more
+void Router::buildSolution() {
     // preorder traversal to buil grsteiner structure
     std::function<void(shared_ptr<TreeNode>)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
         int curId = curNode->id;
@@ -688,6 +693,248 @@ void Router::buildSolution() { //! consider snaking now! so we don't simply use 
     preOrderTraversal(topo->root);
 }
 
+void Router::buildSolution_ISPD()
+{   
+    vector<shared_ptr<GrSteiner_3d>> GrTreeVector;
+    GrTreeVector.resize(this->topo->size);
+    for(int i=0;i<this->topo->size;i++)
+    {
+        GrTreeVector[i]=make_shared<GrSteiner_3d>(pl[i]);
+    }
+    //! Step 1: construct a GrTree of which the topology is as same as the topology of the clock tree
+    std::function<void(shared_ptr<TreeNode>)> preOrderTraversal_transform_to_GrTree= [&](shared_ptr<TreeNode> curNode) {
+        int curId = curNode->id;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            shared_ptr<GrSteiner_3d>& curSteiner = GrTreeVector[curId];
+            curSteiner->layer=curNode->layer;
+            curSteiner->metal_layer_index=curNode->metal_layer_index;
+            curSteiner->isBuffered=curNode->buffered;
+            curSteiner->id=curId;
+
+            auto& lc = curNode->lc;
+            auto& rc = curNode->rc;
+            curSteiner->lc=GrTreeVector[lc->id];
+            curSteiner->rc=GrTreeVector[rc->id];
+            assert(curSteiner->lc);
+            curSteiner->lc->set_par(GrTreeVector[curId]);
+            curSteiner->rc->set_par(GrTreeVector[curId]);
+
+            preOrderTraversal_transform_to_GrTree(lc);
+            preOrderTraversal_transform_to_GrTree(rc);
+        } else {
+            //sink
+            shared_ptr<GrSteiner_3d>& curSteiner = GrTreeVector[curId];
+            curSteiner->layer=curNode->layer;
+            curSteiner->id=curId;
+            curSteiner->isBuffered=curNode->buffered;
+            return;
+        }
+    };
+    preOrderTraversal_transform_to_GrTree(topo->root);
+    cout<<"\ncp2\n";
+    //! Step 2: add buffer nodes, tsv nodes, L-shape middle nodes to the GrTree, and update ids of GrSteiner_3d nodes;
+    int index=2;
+    std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_modify_GrTree= [&](shared_ptr<GrSteiner_3d> curNode) {
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            auto lc = curNode->lc;// root of left subtree
+            auto rc = curNode->rc;// root of right subtree
+
+            curNode->id=index;//! update index!
+            index++;
+
+            if(curNode->isBuffered)//add 2 buffer nodes
+            {
+                shared_ptr<GrSteiner_3d> buffer1=make_shared<GrSteiner_3d>(*curNode);
+                buffer1->id=index;
+                index++;
+                buffer1->metal_layer_index=curNode->metal_layer_index;
+
+                shared_ptr<GrSteiner_3d> buffer2=make_shared<GrSteiner_3d>(*curNode);
+                buffer2->id=index;
+                buffer2->metal_layer_index=curNode->metal_layer_index;
+                index++;
+
+                buffer2->isBuffered=false;// for calculating buffers; cur->buffer1->buffer2, lc and rc are connected to buffer2
+
+                buffer2->set_lc(lc);
+                buffer2->set_rc(rc);
+
+                lc->set_par(buffer2);
+                rc->set_par(buffer2);
+
+                curNode->set_lc(buffer1);
+                curNode->set_rc(NULL);
+                buffer1->set_par(curNode);
+
+                buffer1->set_lc(buffer2);
+                buffer1->set_rc(NULL);
+                buffer2->set_par(buffer1);
+
+                curNode=buffer2;
+            }
+            // Connect lc
+        
+            if(curNode->layer!=lc->layer)//add tsv node, set tsv node layer to lc->layer, and tsv.x=curNode.x-1 for calculating TSVs
+            {
+                shared_ptr<GrSteiner_3d> tsv=make_shared<GrSteiner_3d>(*curNode);
+                tsv->id=index;
+                index++;
+
+                assert(tsv->x>=1);
+                tsv->x--;
+                tsv->layer=lc->layer;
+
+                tsv->set_lc(lc);
+                tsv->set_rc(NULL);
+                lc->set_par(tsv);
+
+                curNode->set_lc(tsv);
+                tsv->set_par(curNode);
+            }
+            // Connect rc
+            assert(rc);
+            if(curNode->layer!=rc->layer)//add tsv node, set tsv node layer to rc->layer, and tsv.x=curNode.x-1 for calculating TSVs
+            {
+                shared_ptr<GrSteiner_3d> tsv=make_shared<GrSteiner_3d>(*curNode);
+                tsv->id=index;
+                index++;
+
+                assert(tsv->x>=1);
+                tsv->x--;
+                tsv->layer=rc->layer;
+
+                tsv->set_lc(rc);
+                tsv->set_rc(NULL);
+                rc->set_par(tsv);
+
+                curNode->set_rc(tsv);
+                tsv->set_par(curNode);
+            }
+            preOrderTraversal_modify_GrTree(lc);
+            preOrderTraversal_modify_GrTree(rc);
+        } else {
+            curNode->id=index;//! update index!
+            index++;
+        }
+    };
+    
+    std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_checkGrTree= [&](shared_ptr<GrSteiner_3d> curNode) {
+        int curId = curNode->id;
+
+        cout<<curId<<" "<<curNode->layer<<" "<<curNode->metal_layer_index<<endl;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+
+
+            auto& lc = curNode->lc;
+            auto& rc = curNode->rc;
+            preOrderTraversal_checkGrTree(lc);
+            preOrderTraversal_checkGrTree(rc);
+        }
+    };
+    
+    preOrderTraversal_modify_GrTree(GrTreeVector[topo->root->id]);
+    cout<<"\ncp3\n";
+    //          cout<<"\nmmmmmmmmmmm\n";
+    //  preOrderTraversal_checkGrTree(GrTreeVector[topo->root->id]); 
+    //  exit(0);
+    //! Step 3: count wires and buffers;
+    vector<wire> wires;
+    vector<wire> buffers;
+    vector<pair<int,int>> sinks;
+
+
+    wire source_buffer;
+    source_buffer.left_id=0;
+    source_buffer.right_id=1;// 1 should be the clock source
+    source_buffer.metal_index=0;
+    buffers.emplace_back(source_buffer);
+    
+    //connect source to clock tree root
+    wire source_to_root;
+    source_to_root.left_id=1;
+    source_to_root.right_id=2;// GrTree root id is 2
+    source_to_root.metal_index=0;
+    wires.emplace_back(source_to_root);
+  
+    std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_count_wires= [&](shared_ptr<GrSteiner_3d> curNode) {
+
+        if (curNode!=NULL) {//! merge node
+            int curId = curNode->id;
+            auto lc = curNode->lc;// root of left subtree
+            auto rc = curNode->rc;// root of right subtree
+            if(curNode->isBuffered)
+            {
+                if(!curNode->lc)
+                {
+                    cout<<"par: "<<curNode->par->isBuffered<<endl;
+                    if(curNode->rc)
+                    {
+                        cout<<"rc: "<<curNode->rc->isBuffered<<endl;
+                    }
+                    exit(0);
+                }
+                wire buffer;
+                buffer.left_id=curNode->id;
+                buffer.right_id=curNode->lc->id;
+                buffer.metal_index=curNode->metal_layer_index-1;// metal index starts from 0 in output
+                buffers.emplace_back(buffer);
+            }else if(curNode->lc)
+            {
+                if(curNode->layer!=curNode->lc->layer)
+                {
+                    wire tsv;
+                    tsv.left_id=curNode->id;
+                    tsv.right_id=curNode->lc->id;
+                    tsv.metal_index=4;// 4 for TSV
+                    wires.emplace_back(tsv);
+                }
+                else
+                {
+                    wire awire;
+                    awire.left_id=curNode->id;
+                    awire.right_id=curNode->lc->id;
+                    awire.metal_index=curNode->metal_layer_index-1;
+                    wires.emplace_back(awire);
+                }
+            }
+            if(curNode->rc)
+            {
+                if(curNode->layer!=curNode->rc->layer)
+                {
+                    wire tsv;
+                    tsv.left_id=curNode->id;
+                    tsv.right_id=curNode->rc->id;
+                    tsv.metal_index=4;// 4 for TSV
+                    wires.emplace_back(tsv);
+                }
+                else
+                {
+                    wire awire;
+                    awire.left_id=curNode->id;
+                    awire.right_id=curNode->rc->id;
+                    awire.metal_index=curNode->metal_layer_index-1;
+                    wires.emplace_back(awire);
+                }
+            }
+            preOrderTraversal_count_wires(lc);
+            preOrderTraversal_count_wires(rc);
+        }
+    };
+    cout<<"\ncp5\n";
+    preOrderTraversal_count_wires(GrTreeVector[topo->root->id]);
+    cout<<"\ncp4\n";
+    //todo match sinks
+    for(wire tempwire:wires)
+    {
+        cout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
+    }
+    cout<<"\n*********\n";
+    for(wire tempwire:buffers)
+    {
+        cout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
+    }
+    //! Step 4: write output file
+}
 
 // void Router::reportTotalWL() {
 
@@ -751,6 +998,11 @@ void Router::writeSolution() {
     // check wirelength
     cout << "Total Wirelength: " << total_wl << endl;
     cout << padding << "Finish Write Result" << padding << endl;
+}
+
+void Router::writeSolution_ISPD()
+{
+
 }
 
 void Router::buildTopology()
@@ -825,7 +1077,7 @@ void Router::buildTopology()
     assert(preOrderId.size()==inOrderId.size());
     topo=make_shared<TreeTopology>();
     assert(topo);
-    topo->inittree(taps.size(),preOrderId.size(),preOrderId,inOrderId);
+    topo->inittree(taps,preOrderId.size(),preOrderId,inOrderId);
     topo->layerassignment(IdAndLayer);
     topo->treeLayerCal();
     //exit(0);
@@ -1020,6 +1272,7 @@ void Router::update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr
     //考虑了buffer insertion的电容update
     if(delta_C > c_constraint){
         nodeMerge->load_capacitance = 300;
+        nodeMerge->buffered=true;
         //nodeMerge->needBuffer = 1;
         return;
     }
@@ -1048,8 +1301,8 @@ void Router::update_merge_Delay(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeN
             r_v * (nodeRight->C * abs(nodeMerge->layer - nodeRight->layer) + 0.5 * c_v * abs(nodeMerge->layer - nodeRight->layer) * abs(nodeMerge->layer - nodeRight->layer)) +
             r_w * c_w * abs(nodeMerge->layer - nodeRight->layer) * (ea + eb) -
             (r_w * c_v - r_v * c_w) * abs(nodeMerge->layer - nodeRight->layer) * ea;*/
-    printf("/****Test Merge Delay****/\n"
-           "Delay before merge: Left: %f, Right: %f, after: Left: %f,  Right: %f\n", nodeLeft->delay,nodeRight->delay, delta_delay, delta_delay_right);
+    // printf("/****Test Merge Delay****/\n"
+    //        "Delay before merge: Left: %f, Right: %f, after: Left: %f,  Right: %f\n", nodeLeft->delay,nodeRight->delay, delta_delay, delta_delay_right);
     //按最大delay进行录入
     if(delta_delay >= delta_delay_right)
         nodeMerge->delay = delta_delay;
@@ -1099,7 +1352,7 @@ void Router::RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode
     t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
     t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
     //需要考虑extra wirelength存在的情况。但是尽量不要引入额外的线长。
-    cout<<"Iterating...."<<endl;
+    // cout<<"Iterating...."<<endl;
     int count=0;
     while(fabs(t_a + nodeLeft->delay - (t_b + nodeRight->delay)) > 1){//? >=1?    
         count++;
@@ -1123,12 +1376,12 @@ void Router::RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode
         }
 
     }
-    cout<<"Iteration done"<<endl;
+    // cout<<"Iteration done"<<endl;
     //printf("原本的 delay: left: %f, right: %f\n", nodeLeft->delay, nodeRight->delay);
-    printf("left: %f, right: %f\n t_a: %f, t_b: %f\n total left: %f, total right: %f\n", nodeLeft->delay, nodeRight->delay, t_a, t_b, t_a+nodeLeft->delay, t_b + nodeRight->delay);
+    // printf("left: %f, right: %f\n t_a: %f, t_b: %f\n total left: %f, total right: %f\n", nodeLeft->delay, nodeRight->delay, t_a, t_b, t_a+nodeLeft->delay, t_b + nodeRight->delay);
     t_a = calc_delay_RLC(nodeMerge, nodeLeft, ea);
     t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
-    printf("RC delay: %f, %f\n", t_a, t_b);
+    // printf("RC delay: %f, %f\n", t_a, t_b);
 
     update_merge_Capacitance(nodeMerge, nodeLeft, nodeRight, ea, eb);
     //update_merge_Delay(nodeMerge, nodeLeft, nodeRight, ea, eb);
@@ -1231,25 +1484,25 @@ void Router::initiate_parameters()
     metal global_metal;
     global_metal.cw=0.000283;
     global_metal.rw=0.000011;
-    global_metal.lw=0.000000000000013265;
+    global_metal.lw=0.000000000000011883;
     metals.emplace_back(global_metal);
 
     metal semi_global_metal;
     semi_global_metal.cw=0.000265;
     semi_global_metal.rw=0.000053;
-    semi_global_metal.lw=0.0000000000000132958;
+    semi_global_metal.lw=0.000000000000011914;
     metals.emplace_back(semi_global_metal);
 
     metal intermidiate_metal;
     intermidiate_metal.cw=0.000265;
     intermidiate_metal.rw=0.000429;
-    intermidiate_metal.lw=0.0000000000000135098;
+    intermidiate_metal.lw=0.000000000000012128;
     metals.emplace_back(intermidiate_metal);
 
     metal local_metal;
     local_metal.cw=0.000267;
     local_metal.rw=0.001714;
-    local_metal.lw=0.0000000000000135098;
+    local_metal.lw=0.000000000000012128;
     metals.emplace_back(local_metal);
 }
 
@@ -1476,4 +1729,27 @@ void Router::bouncing_check()
     int index=0;
     preOrderTraversal(this->topo->root);
     
+}
+
+int Router::count_TSV()
+{
+    int tsv_number=0;
+    std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+        int curId = curNode->id;
+        if (curNode->lc != NULL && curNode->rc != NULL) {
+            postOrderTraversal(curNode->lc);
+            postOrderTraversal(curNode->rc);
+            if(curNode->lc->layer!=curNode->layer)
+            {
+                tsv_number++;
+            }
+            if(curNode->rc->layer!=curNode->layer)
+            {
+                tsv_number++;
+            }
+            return;
+        }
+    };
+    postOrderTraversal(topo->root);
+    return tsv_number;
 }

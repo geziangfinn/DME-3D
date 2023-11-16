@@ -21,6 +21,12 @@ struct metal{
     double lw;
 };
 
+struct wire{
+    int left_id;
+    int right_id;
+    int metal_index;
+};
+
 class PointPair {
     // V_{i,k,n}
 public:
@@ -127,6 +133,10 @@ public:
             return 0;
         }
         double slope=1.0 * (p1.y - p2.y) / (p1.x - p2.x);
+        if(!(abs(slope + 1) < 1e-5||abs(slope-1)<1e-5))
+        {
+            cout<<endl<<slope<<endl;
+        }
         assert(abs(slope + 1) < 1e-6||abs(slope-1)<1e-6);
         return slope;
     }
@@ -152,7 +162,7 @@ public:
             if (abs((rhs.p1.y - p1.y) * (p2.x - p1.x) - (p2.y - p1.y) * (rhs.p1.x - p1.x)) < eps) {// check if 4 points same line
                 // if ((rhs.p1.y - p1.y) * (p2.x - p1.x) == (p2.y - p1.y) * (rhs.p1.x - p1.x)) {
                 if (p1.y - eps <= rhs.p1.y && rhs.p1.y <= p2.y + eps) {  // valid intersection
-                    cout<<"eps check: "<<p1.x<<" "<<p1.y<<" "<<p2.x<<" "<<p2.y<<" "<<rhs.p1.x<<" "<<rhs.p1.y<<endl;
+                    // cout<<"eps check: "<<p1.x<<" "<<p1.y<<" "<<p2.x<<" "<<p2.y<<" "<<rhs.p1.x<<" "<<rhs.p1.y<<endl;
                     Segment ret = rhs;
                     ret.id = -2;  // return single point intersection
                     return ret;
@@ -263,7 +273,7 @@ public:
         // for (auto& seg1 : trr_Sides) {
         //     cout << seg1 << endl;
         // }
-        cout<<"\ntop-dwon\n";
+        // cout<<"\ntop-dwon\n";
         for (auto& side : trr_Sides) {
             Segment intersection = side.intersect(seg);
             if (intersection.id != -1) {
@@ -293,6 +303,7 @@ public:
     double load_capacitance;// load from taps
     double delay;
     int metal_layer_index;// for non-leaf tree nodes, assign the metal used to connect a tree node to its children
+    bool buffered=false;
     TRR trr;
     shared_ptr<TreeNode> lc;
     shared_ptr<TreeNode> rc;
@@ -322,16 +333,16 @@ public:
 
     //TreeTopology(alglib::integer_2d_array& HC_res) : HC_result(HC_res) {}
     TreeTopology(){}
-    void inittree(int leafNum, int sz, vector<int> preOrder, vector<int> inOrder);
+    void inittree(vector<TAP> taps, int sz, vector<int> preOrder, vector<int> inOrder);
     // construct binary tree structure based on current Hierarchical clustering result
     void constructTree_old(bool modifyCurrentTree = false);
-    void constructTree(vector<int> preOrder, vector<int> inOrder);
+    void constructTree(vector<TAP> taps, vector<int> preOrder, vector<int> inOrder);
     void layerassignment(vector<pair<int,int>> IdAndLayer);
     void treeLayerCal();
     int getSumOfDiameter();
     // randomly switch leaf nodes to reduce sum of diameter
     void refineStructure(int iter = 10000);
-    shared_ptr<TreeNode> buildTree(vector<int> pre,vector<int> in, int preStart, int preEnd, int inStart, int inEnd);
+    shared_ptr<TreeNode> buildTree(vector<TAP> taps, vector<int> pre,vector<int> in, int preStart, int preEnd, int inStart, int inEnd);
 };
 
 class GrSteiner : public GridPoint {
@@ -353,6 +364,28 @@ public:
     void set_par(shared_ptr<GrSteiner> p) { par = p; }
 };
 
+class GrSteiner_3d:public GridPoint{
+public:
+    shared_ptr<GrSteiner_3d> lc;
+    shared_ptr<GrSteiner_3d> rc;
+    shared_ptr<GrSteiner_3d> par;
+    int id;
+    int metal_layer_index;
+    bool isBuffered=false;
+
+    GrSteiner_3d(GridPoint p){
+        x = p.x;
+        y= p.y;
+        lc = NULL;
+        rc = NULL;
+        par = NULL;
+    }
+
+    void set_lc(shared_ptr<GrSteiner_3d> child) { lc = child; }
+    void set_rc(shared_ptr<GrSteiner_3d> child) { rc = child; }
+    void set_par(shared_ptr<GrSteiner_3d> p) { par = p; }
+};
+
 class Router {
 public:
     int MAX_RUNTIME = 3600;  // test 1
@@ -372,6 +405,7 @@ public:
     GridPoint clockSource;
     vector<GridPoint> pl;
     vector<shared_ptr<GrSteiner>> sol;
+    vector<shared_ptr<GrSteiner>> ispd_sol;
         // vector<vector<GridPoint>> sol;
     int chip_layer_number=2;// default: 2 layers, the following implementation is for multilayers, in case of potential extension in the future
     int metal_layer_number=4;// default: 4 layers, the following implementation is for arbitrary metal layer number, in case of potential extension in the future
@@ -388,14 +422,17 @@ public:
     void DME();  // Deferred-Merge Embedding
     void route();
     void buildSolution();
+    void buildSolution_ISPD();
     void reportTotalWL();
     void writeSolution();
+    void writeSolution_ISPD();
     void buildTopology();
     void setdelay_model(int);
     void draw_bottom_up();
     void draw_solution();
     void draw_TRR_pair(TRR trr1,TRR trr2);
     void bouncing_check();
+    int count_TSV();//! this function is for 2-layer chip only
     Segment TRRintersect(TRR& trr1,TRR& trr2);
     double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L);
     double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag);

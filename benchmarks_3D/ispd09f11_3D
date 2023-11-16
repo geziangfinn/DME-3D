@@ -123,11 +123,12 @@ num sink 121
 120 Coordinate: 7417066 6838669 2 35
 121 Coordinate: 7559494 7337420 1 35
 num wirelib 2
-0 0.0001 0.0002 0.0000000000000018
-1 0.035 15.48 0.000000000013827
-num buflib 1
+0 0.0001 0.0002
+1 0.0003 0.00016
+num buflib 2
 0 clkinv0.subckt 1 35 80 61.2
+1 clkinv1.subckt 1 4.2 6.1 440
 simulation vdd 1 1.2
-limit slew 2000
+limit slew 100
 limit cap 118000
 num blockage 0

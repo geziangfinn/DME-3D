@@ -30,7 +30,9 @@ int main(int argc, char *argv[]){
     router.buildSolution();
     router.draw_solution();
     router.writeSolution();
-    
+    // router.buildSolution_ISPD();
+    int tsvnumber=router.count_TSV();
+    cout<<"TSV number: "<<tsvnumber<<endl;
     cout << "End of Process" << endl;
     return 0;
 }
