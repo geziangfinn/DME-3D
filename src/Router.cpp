@@ -733,7 +733,143 @@ void Router::buildSolution_ISPD()
     };
     preOrderTraversal_transform_to_GrTree(topo->root);
     //! Step 2: add buffer nodes, tsv nodes, L-shape middle nodes to the GrTree, and update ids of GrSteiner_3d nodes;
+
+    //! add source buffers in L-shape
+    //! assume source = (0,0)
     int index=2;
+    vector<wire> source_buffers;
+    vector<wire> source_root_wires;
+    vector<GrSteiner_3d> buffernodes;
+    double sourcex=pl[topo->root->id].x;
+    double sourcey=pl[topo->root->id].y;
+
+    GridPoint middle;
+    middle.x=0;
+    middle.y=sourcey;
+    
+    GrSteiner_3d oneinverter(GridPoint(0,0));
+    oneinverter.id=1;
+    buffernodes.emplace_back(oneinverter);
+
+    int number_of_buffers_on_x=sourcex/1000000;// a buffer per 1000 um, that is 1000000 nm
+    int number_of_buffers_on_y=sourcey/1000000;// a buffer per 1000 um, that is 1000000 nm
+
+    for(int i=1;i<=number_of_buffers_on_y;i++)
+    {
+        GrSteiner_3d tempnode(GridPoint(0,1000000*i));
+        tempnode.id=index;
+  
+        buffernodes.emplace_back(tempnode);
+    
+        wire onewire;
+        onewire.left_id=index-1;
+        onewire.right_id=index;
+        onewire.metal_index=0;
+        source_root_wires.emplace_back(onewire);
+        
+        index++;
+
+        GrSteiner_3d tempbuffer1(GridPoint(0,1000000*i));
+        tempbuffer1.id=index;
+        buffernodes.emplace_back(tempbuffer1);
+
+        wire onebuffer1;
+        onebuffer1.left_id=index-1;
+        onebuffer1.right_id=index;
+        onebuffer1.metal_index=0;
+        source_buffers.emplace_back(onebuffer1);
+
+        index++;
+
+        GrSteiner_3d tempbuffer2(GridPoint(0,1000000*i));
+        tempbuffer2.id=index;
+        buffernodes.emplace_back(tempbuffer2);
+
+        wire onebuffer2;
+        onebuffer2.left_id=index-1;
+        onebuffer2.right_id=index;
+        onebuffer2.metal_index=0;
+        source_buffers.emplace_back(onebuffer2);
+
+        index++;
+    }
+
+    GrSteiner_3d middlepoint(middle);
+    middlepoint.id=index;
+
+    wire ybuffertomiddle;
+    ybuffertomiddle.left_id=index-1;
+    ybuffertomiddle.right_id=index;
+    ybuffertomiddle.metal_index=0;
+    index++;
+
+    buffernodes.emplace_back(middlepoint);
+    source_root_wires.emplace_back(ybuffertomiddle);
+
+    for(int i=1;i<=number_of_buffers_on_x;i++)
+    {
+        GrSteiner_3d tempnode(GridPoint(1000000*i,middle.y));
+        tempnode.id=index;
+  
+        buffernodes.emplace_back(tempnode);
+
+        wire onewire;
+        onewire.left_id=index-1;
+        onewire.right_id=index;
+        onewire.metal_index=0;
+        source_root_wires.emplace_back(onewire);
+        
+        index++;
+
+        GrSteiner_3d tempbuffer1(GridPoint(1000000*i,middle.y));
+        tempbuffer1.id=index;
+        buffernodes.emplace_back(tempbuffer1);
+
+        wire onebuffer1;
+        onebuffer1.left_id=index-1;
+        onebuffer1.right_id=index;
+        onebuffer1.metal_index=0;
+        source_buffers.emplace_back(onebuffer1);
+        index++;
+
+        GrSteiner_3d tempbuffer2(GridPoint(1000000*i,middle.y));
+        tempbuffer2.id=index;
+        buffernodes.emplace_back(tempbuffer2);
+
+        wire onebuffer2;
+        onebuffer2.left_id=index-1;
+        onebuffer2.right_id=index;
+        onebuffer2.metal_index=0;
+        source_buffers.emplace_back(onebuffer2);
+        index++;
+    }
+
+    wire xbuffertosource;
+    xbuffertosource.left_id=index-1;
+    xbuffertosource.right_id=index;
+    xbuffertosource.metal_index=0;
+
+    source_root_wires.emplace_back(xbuffertosource);
+
+    cout<<"buffer nodes: \n";
+    for(GrSteiner_3d temp:buffernodes)
+    {
+        cout<<temp.id<<" "<<temp<<endl;
+    }
+    cout<<"source buffers: \n";
+    for(wire temp:source_buffers)
+    {
+        cout<<temp.left_id<<" "<<temp.right_id<<" "<<temp.metal_index<<endl;
+    }
+    cout<<"wires: \n";
+    for(wire temp:source_root_wires)
+    {
+        cout<<temp.left_id<<" "<<temp.right_id<<" "<<temp.metal_index<<endl;
+    }
+    cout<<"index: "<<index<<endl;
+
+    // exit(0);
+
     std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_modify_GrTree= [&](shared_ptr<GrSteiner_3d> curNode) {
         if (curNode->lc != NULL && curNode->rc != NULL) {
             auto lc = curNode->lc;// root of left subtree
@@ -844,16 +980,16 @@ void Router::buildSolution_ISPD()
 
     wire source_buffer;
     source_buffer.left_id=0;
-    source_buffer.right_id=1;// 1 should be the clock source
+    source_buffer.right_id=1;
     source_buffer.metal_index=0;
     buffers.emplace_back(source_buffer);
     
-    //connect source to clock tree root
-    wire source_to_root;
-    source_to_root.left_id=1;
-    source_to_root.right_id=2;// GrTree root id is 2
-    source_to_root.metal_index=0;
-    wires.emplace_back(source_to_root);
+    // //connect source to clock tree root
+    // wire source_to_root;
+    // source_to_root.left_id=1;
+    // source_to_root.right_id=2;// GrTree root id is 2
+    // source_to_root.metal_index=0;
+    // wires.emplace_back(source_to_root);
   
     std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_count_wires= [&](shared_ptr<GrSteiner_3d> curNode) {
 
@@ -930,9 +1066,12 @@ void Router::buildSolution_ISPD()
     } else {
         cout << padding << "Successfully open input:" << setting.output_file_name+"/"+setting.get_case_name()+"_script"<< padding << endl;
     }
-    fout<<"source node 0 0\n";
+    fout<<"sourcenode 0 0\n";
     fout<<"num node "<<index-taps.size()-1<<endl;
-    fout<<"1 0 0\n";
+    for(GrSteiner_3d temp:buffernodes)
+    {
+        fout<<temp.id<<" "<<temp.x<<" "<<temp.y<<endl;
+    }
     std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_print_nodes= [&](shared_ptr<GrSteiner_3d> curNode) {
         if (curNode!=NULL) {//! merge node
 
@@ -952,16 +1091,24 @@ void Router::buildSolution_ISPD()
     fout<<"num sinknode "<<taps.size()<<endl;
     for(int i=0;i<taps.size();i++)
     {
-        fout<<GrTreeVector[i]->id<<" "<<i<<endl;
+        fout<<GrTreeVector[i]->id<<" "<<i+1<<endl;
     }
 
-    fout<<"num wire "<<wires.size()<<endl;
+    fout<<"num wire "<<wires.size()+source_root_wires.size()<<endl;
+    for(wire temp:source_root_wires)
+    {
+        fout<<temp.left_id<<" "<<temp.right_id<<" "<<temp.metal_index<<endl;
+    }
     for(wire tempwire:wires)
     {
         fout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
     }
 
-    fout<<"num buffer "<<buffers.size()<<endl;
+    fout<<"num buffer "<<buffers.size()+source_buffers.size()<<endl;
+    for(wire temp:source_buffers)
+    {
+        fout<<temp.left_id<<" "<<temp.right_id<<" "<<temp.metal_index<<endl;
+    }
     for(wire tempwire:buffers)
     {
         fout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
