@@ -396,6 +396,9 @@ public:
     vector<TRR> vertexTRR;
     vector<double> vertexDistE;
     shared_ptr<TreeTopology> topo;
+    int buffercount;
+    int tsvcount;
+    double totalwirelength;
 
     vector<metal> metals;
     string _RUNDIR = "../run_tmp/";
@@ -405,7 +408,6 @@ public:
     GridPoint clockSource;
     vector<GridPoint> pl;
     vector<shared_ptr<GrSteiner>> sol;
-    vector<shared_ptr<GrSteiner>> ispd_sol;
         // vector<vector<GridPoint>> sol;
     int chip_layer_number=2;// default: 2 layers, the following implementation is for multilayers, in case of potential extension in the future
     int metal_layer_number=4;// default: 4 layers, the following implementation is for arbitrary metal layer number, in case of potential extension in the future
@@ -425,14 +427,13 @@ public:
     void buildSolution_ISPD();
     void reportTotalWL();
     void writeSolution();
-    void writeSolution_ISPD();
     void buildTopology();
     void setdelay_model(int);
     void draw_bottom_up();
     void draw_solution();
     void draw_TRR_pair(TRR trr1,TRR trr2);
     void bouncing_check();
-    int count_TSV();//! this function is for 2-layer chip only
+    void count_TSV();//! this function is for 2-layer chip only
     Segment TRRintersect(TRR& trr1,TRR& trr2);
     double calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L);
     double calc_L2_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, int tag);

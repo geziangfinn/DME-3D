@@ -472,6 +472,7 @@ void Router::DME() {
     vertexDistE.resize(topo->size);
 
     bool RLC=true;
+    buffercount=0;
 
     // 1. Build Tree of Segments (bottom up)
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
@@ -731,7 +732,6 @@ void Router::buildSolution_ISPD()
         }
     };
     preOrderTraversal_transform_to_GrTree(topo->root);
-    cout<<"\ncp2\n";
     //! Step 2: add buffer nodes, tsv nodes, L-shape middle nodes to the GrTree, and update ids of GrSteiner_3d nodes;
     int index=2;
     std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_modify_GrTree= [&](shared_ptr<GrSteiner_3d> curNode) {
@@ -833,7 +833,6 @@ void Router::buildSolution_ISPD()
     };
     
     preOrderTraversal_modify_GrTree(GrTreeVector[topo->root->id]);
-    cout<<"\ncp3\n";
     //          cout<<"\nmmmmmmmmmmm\n";
     //  preOrderTraversal_checkGrTree(GrTreeVector[topo->root->id]); 
     //  exit(0);
@@ -920,20 +919,67 @@ void Router::buildSolution_ISPD()
             preOrderTraversal_count_wires(rc);
         }
     };
-    cout<<"\ncp5\n";
     preOrderTraversal_count_wires(GrTreeVector[topo->root->id]);
-    cout<<"\ncp4\n";
     //todo match sinks
+    //! Step 4: write output file
+    ofstream fout(setting.output_file_name+"/"+setting.get_case_name()+"_script");
+    fout.setf(ios::fixed,ios::floatfield);
+    if (fout.fail()) {
+        cout << "Fail to open file:" << setting.output_file_name+"/"+setting.get_case_name()+"_script" << endl;
+        exit(1);
+    } else {
+        cout << padding << "Successfully open input:" << setting.output_file_name+"/"+setting.get_case_name()+"_script"<< padding << endl;
+    }
+    fout<<"source node 0 0\n";
+    fout<<"num node "<<index-taps.size()-1<<endl;
+    fout<<"1 0 0\n";
+    std::function<void(shared_ptr<GrSteiner_3d>)> preOrderTraversal_print_nodes= [&](shared_ptr<GrSteiner_3d> curNode) {
+        if (curNode!=NULL) {//! merge node
+
+            auto lc = curNode->lc;// root of left subtree
+            auto rc = curNode->rc;// root of right subtree
+            if(lc||rc)
+            {
+                int curId = curNode->id;
+                fout<<curId<<" "<<curNode->x<<" "<<curNode->y<<endl;
+            }
+            preOrderTraversal_print_nodes(lc);
+            preOrderTraversal_print_nodes(rc);
+        }
+    };
+    preOrderTraversal_print_nodes(GrTreeVector[topo->root->id]);
+    
+    fout<<"num sinknode "<<taps.size()<<endl;
+    for(int i=0;i<taps.size();i++)
+    {
+        fout<<GrTreeVector[i]->id<<" "<<i<<endl;
+    }
+
+    fout<<"num wire "<<wires.size()<<endl;
     for(wire tempwire:wires)
     {
-        cout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
+        fout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
     }
-    cout<<"\n*********\n";
+
+    fout<<"num buffer "<<buffers.size()<<endl;
     for(wire tempwire:buffers)
     {
-        cout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
+        fout<<tempwire.left_id<<" "<<tempwire.right_id<<" "<<tempwire.metal_index<<endl;
     }
-    //! Step 4: write output file
+
+    //! Step 5: output wirelength, buffer number and tsv number
+    ofstream fout2(setting.output_file_name+"/"+setting.get_case_name()+"_stats");
+    fout2.setf(ios::fixed,ios::floatfield);
+    if (fout2.fail()) {
+        cout << "Fail to open file:" << setting.output_file_name+"/"+setting.get_case_name()+"_stats" << endl;
+        exit(1);
+    } else {
+        cout << padding << "Successfully open input:" << setting.output_file_name+"/"+setting.get_case_name()+"_stats" << padding << endl;
+    }
+    fout2<<"Total wirelength: "<<totalwirelength<<endl;
+    fout2<<"TSV number: "<<tsvcount<<endl;
+    fout2<<"Buffer number: "<<buffercount<<endl;
+
 }
 
 // void Router::reportTotalWL() {
@@ -998,11 +1044,8 @@ void Router::writeSolution() {
     // check wirelength
     cout << "Total Wirelength: " << total_wl << endl;
     cout << padding << "Finish Write Result" << padding << endl;
-}
-
-void Router::writeSolution_ISPD()
-{
-
+    totalwirelength=total_wl;
+    count_TSV();
 }
 
 void Router::buildTopology()
@@ -1273,6 +1316,7 @@ void Router::update_merge_Capacitance(shared_ptr<TreeNode> nodeMerge, shared_ptr
     if(delta_C > c_constraint){
         nodeMerge->load_capacitance = 300;
         nodeMerge->buffered=true;
+        buffercount++;
         //nodeMerge->needBuffer = 1;
         return;
     }
@@ -1383,7 +1427,7 @@ void Router::RLC_calculation(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode
     t_b = calc_delay_RLC(nodeMerge, nodeRight, eb);
     // printf("RC delay: %f, %f\n", t_a, t_b);
 
-    update_merge_Capacitance(nodeMerge, nodeLeft, nodeRight, ea, eb);
+    //update_merge_Capacitance(nodeMerge, nodeLeft, nodeRight, ea, eb);
     //update_merge_Delay(nodeMerge, nodeLeft, nodeRight, ea, eb);
     if(t_a + nodeLeft->delay > t_b + nodeRight->delay)
         nodeMerge->delay = t_a + nodeLeft->delay;
@@ -1731,7 +1775,7 @@ void Router::bouncing_check()
     
 }
 
-int Router::count_TSV()
+void Router::count_TSV()
 {
     int tsv_number=0;
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
@@ -1751,5 +1795,5 @@ int Router::count_TSV()
         }
     };
     postOrderTraversal(topo->root);
-    return tsv_number;
+    tsvcount=tsv_number;
 }
