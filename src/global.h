@@ -16,6 +16,7 @@
 #include <map>
 #include <cmath>
 #include <functional>
+#include <limits>
 //#include "../alglib/src/stdafx.h"
 //#include "../alglib/src/dataanalysis.h"
 #define RESET   "\033[0m"

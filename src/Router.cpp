@@ -1,6 +1,5 @@
 #include "Router.h"
 #include "Setting.h"
-#include "Parser.h"
 #include "Drawer.h"
 using std::cout;
 using std::endl;
@@ -13,14 +12,116 @@ using std::setprecision;
 #define eps 1e-6
 const string padding(30, '=');
 
-void TreeTopology::inittree(vector<TAP> taps, int sz, vector<int> preOrder, vector<int> inOrder) {
+void TreeTopology::inittree_from_binary(vector<TAP> taps, int sz, vector<int> preOrder, vector<int> inOrder) {
     leafNumber = taps.size();
     size = sz;
     cout << "Initialize topo: " << leafNumber << " leaves and " << sz << " nodes in total" << endl;
     //constructTree(true);
-    constructTree(taps,preOrder,inOrder);
+    constructTree_from_binary(taps,preOrder,inOrder);
 }
-void TreeTopology::constructTree_old(bool modifyCurrentTree) {
+void TreeTopology::inittree_nng(vector<TAP> taps)
+{
+    vector<shared_ptr<TreeNode>> treeNodes;
+    vector<TAP> treeNodeLocation;
+    for(int i=0;i<taps.size();i++)
+    {
+        TAP tap=taps[i];
+        assert(i==tap.id);
+        shared_ptr<TreeNode> curRoot=make_shared<TreeNode>(tap.id);
+        curRoot->layer=tap.layer;
+        curRoot->load_capacitance=tap.capacitance;
+        //cout<<curRoot->id<<endl;
+        treeNodes.emplace_back(curRoot);
+        treeNodeLocation.emplace_back(tap);
+    }
+    int leafNumber=taps.size();
+    //treeNodes is the S, after every merge merged, the merge node is added to S
+    vector<nng_pair> current_minimum_pairs;
+    
+    vector<bool> merged;
+    merged.resize(treeNodes.size(),false);
+
+    int unmerge_node_number=treeNodes.size();
+
+    while(unmerge_node_number>1)//! this while loop surely is the bottleneck for nng calculation. A potential "contribution"?
+    {
+        //calculate new nng and pick one pair to merge
+        for(int i=0;i<treeNodes.size();i++)
+        {
+            assert(treeNodes[i]->id==i);
+            if(!merged[i])
+            {
+                double cost=numeric_limits<double>::max();
+                int to=-1;
+                for(int j=0;j<treeNodes.size();j++)
+                {
+                    if((i!=j)&&!merged[j])
+                    {
+                        if(treeNodeLocation[i].cost_dme3d(treeNodeLocation[j])<cost)
+                        {
+                            cost=treeNodeLocation[i].cost_dme3d(treeNodeLocation[j]);
+                            to=j;
+                        }
+                        
+                    }
+                }
+                assert(to!=-1);
+                current_minimum_pairs.emplace_back(nng_pair(treeNodes[i]->id,treeNodes[to]->id,cost));
+            }
+        }
+        //! find a pair with the smallest cost in current_minimum_pairs and merge
+        sort(current_minimum_pairs.begin(),current_minimum_pairs.end(),[=] (nng_pair a, nng_pair b) { 
+            return a.cost<=b.cost;//! pair with smaller cost are placed at front
+        });//? sort to find the smallest is a waste?(nlogn instead of n)
+
+        nng_pair best_pair=current_minimum_pairs.front();
+
+        shared_ptr<TreeNode> mergeNode=make_shared<TreeNode>(treeNodes.size());//!
+
+        double merge_x=(treeNodeLocation[best_pair.from].x+treeNodeLocation[best_pair.to].x)/2;
+        double merge_y=(treeNodeLocation[best_pair.from].y+treeNodeLocation[best_pair.to].y)/2;
+        double merge_capacitance=treeNodeLocation[best_pair.from].capacitance+treeNodeLocation[best_pair.to].capacitance;
+        //capacitance of treeNodes are updated in DME
+
+        TAP mergeNodeLocation(mergeNode->id,merge_x,merge_y,-1,merge_capacitance);//! ids in treeNodeLocation match ids in treeNodes!
+        
+        mergeNode->lc=treeNodes[best_pair.from];
+        mergeNode->rc=treeNodes[best_pair.to];
+        treeNodes[best_pair.from]->par=mergeNode;
+        treeNodes[best_pair.to]->par=mergeNode;
+
+        treeNodes.emplace_back(mergeNode);
+        unmerge_node_number++;
+        unmerge_node_number-=2;
+
+        merged.emplace_back(false);
+        merged[best_pair.from]=true;
+        merged[best_pair.to]=true;
+        //cout<<"merging "<<best_pair.from<<" "<<best_pair.to<<endl;
+
+        treeNodeLocation.emplace_back(mergeNodeLocation);
+
+        current_minimum_pairs.clear();
+    }
+    root=treeNodes.back();  
+
+    int tempsize=0;
+    std::function<void(shared_ptr<TreeNode>)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+         if(curNode!=nullptr){
+            int curId = curNode->id;
+            //cout<<"nng: "<<curId<<endl;
+            preOrderTraversal(curNode->lc);
+            preOrderTraversal(curNode->rc);
+            tempsize++;
+            //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
+        }
+    };
+    preOrderTraversal(root);
+    size=tempsize;
+    //! the last node in treeNodes should be the root node.
+}
+void TreeTopology::constructTree_old(bool modifyCurrentTree)
+{
     vector<vector<int>> DAG(size);
     // cout << "rows " << HC_result.rows() << endl;
     //int n_merges = HC_result.rows();
@@ -70,20 +171,18 @@ void TreeTopology::constructTree_old(bool modifyCurrentTree) {
     }
 }
 
-void TreeTopology::constructTree(vector<TAP> taps, vector<int> preOrder, vector<int> inOrder)
+void TreeTopology::constructTree_from_binary(vector<TAP> taps, vector<int> preOrder, vector<int> inOrder)
 {
-    root=buildTree(taps,preOrder,inOrder,0,preOrder.size()-1,0,inOrder.size()-1);
+    root=buildTree_from_binary(taps,preOrder,inOrder,0,preOrder.size()-1,0,inOrder.size()-1);
 
-    std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
-         if(curNode!=nullptr){
-            postOrderTraversal(curNode->lc);
-            postOrderTraversal(curNode->rc);
-            int curId = curNode->id;
-            //cout<<"Vis: "<<curId<<endl;
-            //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
-        }
-    };
-    postOrderTraversal(root);
+    // std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+    //      if(curNode!=nullptr){
+    //         postOrderTraversal(curNode->lc);
+    //         postOrderTraversal(curNode->rc);
+    //         int curId = curNode->id;
+    //     }
+    // };
+    // postOrderTraversal(root);
 }
 
 void TreeTopology::layerassignment(vector<pair<int, int>> IdAndLayer){
@@ -132,7 +231,7 @@ void TreeTopology::treeLayerCal()
     levelTraversal(root);
 }
 
-shared_ptr<TreeNode> TreeTopology::buildTree(vector<TAP> taps, vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
+shared_ptr<TreeNode> TreeTopology::buildTree_from_binary(vector<TAP> taps, vector<int> pre, vector<int> in, int preStart, int preEnd, int inStart, int inEnd)
 {
         if(preStart>preEnd)
         {
@@ -149,8 +248,8 @@ shared_ptr<TreeNode> TreeTopology::buildTree(vector<TAP> taps, vector<int> pre, 
 
         while (rootInInorder < inEnd && pre[preStart] != in[rootInInorder]) rootInInorder++;
 
-        curRoot->lc=buildTree(taps,pre,in,preStart+1,rootInInorder-inStart+preStart,inStart,rootInInorder-1);
-        curRoot->rc=buildTree(taps,pre,in,rootInInorder-inStart+preStart+1,preEnd,rootInInorder+1,inEnd);
+        curRoot->lc=buildTree_from_binary(taps,pre,in,preStart+1,rootInInorder-inStart+preStart,inStart,rootInInorder-1);
+        curRoot->rc=buildTree_from_binary(taps,pre,in,rootInInorder-inStart+preStart+1,preEnd,rootInInorder+1,inEnd);
         if(curRoot->lc)
         {
             curRoot->lc->set_par(curRoot);
@@ -173,19 +272,28 @@ void Router::init() {
     readInput();
 }
 void Router::readInput() {
-    vector<sink> sinks=parse(setting.input_file_name);
-
+    ispdparser=ispd2009_parser(setting.input_file_name);
+    ispdparser.parse();
+    vector<parser_sink> sinks=ispdparser.get_sinks();
+    vector<parser_blockage> blockages=ispdparser.get_blockages();
     int tap_id=0;
-    for(sink sink:sinks)
+    for(parser_sink sink:sinks)
     {
         taps.emplace_back(tap_id, sink.x, sink.y,sink.layer,sink.capacitance);
         assert(sink.capacitance<=c_constraint);
-        tap_id++;
+        tap_id++;// tap id starts from 0!
+    }
+    for(parser_blockage blockage:blockages)
+    {
+        BLOCK tempblock;
+        tempblock.ll=GridPoint(blockage.llx,blockage.lly);
+        tempblock.ur=GridPoint(blockage.urx,blockage.ury);
+        blocks.emplace_back(tempblock);
     }
     cout.setf(ios::fixed,ios::floatfield);
-    for (auto& tap : taps) {
-        cout << tap << endl;
-    }
+    // for (auto& tap : taps) {
+    //     cout << tap << endl;
+    // }
     cout << padding << "Finish Reading input" << padding << endl;
 }
 
@@ -465,7 +573,7 @@ void Router::DME() {
     // cout << seg1.intersect(seg2) << endl;
     // exit(1);
     cout << BLUE << "[Router]" << RESET<<" begin DME\n";
-    cout<<endl<<topo->size<<endl;
+    cout<<"topo size: "<<topo->size<<endl;
     //exit(0);
     vertexMS.resize(topo->size);
     vertexTRR.resize(topo->size);
@@ -478,6 +586,7 @@ void Router::DME() {
     std::function<void(shared_ptr<TreeNode>)> postOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
         int curId = curNode->id;
         if (curNode->lc != NULL && curNode->rc != NULL) {//!的确不会有只有一个子节点的中间节点
+            //cout<<"dming node: "<<curId<<endl;
             postOrderTraversal(curNode->lc);
             postOrderTraversal(curNode->rc);
             // create merging segment for curNode
@@ -567,12 +676,12 @@ void Router::DME() {
             // cout << "Delay diff " << e_a_dist + ms_a.delay - (e_b_dist + ms_b.delay) << endl;
         } else {
             // Create ms for leaf node
-            
+            //cout<<"dming leaf: "<<curId<<endl;
             vertexMS[curId] = Segment(taps[curId], taps[curId]);
             //vertexMS[curId] = Segment(taps[curId]);
-            
+
             curNode->trr.core = Segment(taps[curId]);
-            //cout<<"leaf node id: "<<curId<<endl;
+            //cout<<"leaf ttnode id: "<<curId<<endl;
         }
     };
     postOrderTraversal(topo->root);
@@ -1091,7 +1200,7 @@ void Router::buildSolution_ISPD()
     fout<<"num sinknode "<<taps.size()<<endl;
     for(int i=0;i<taps.size();i++)
     {
-        fout<<GrTreeVector[i]->id<<" "<<i+1<<endl;
+        fout<<GrTreeVector[i]->id<<" "<<i+1<<endl;// sink id starts from 0 in this code, but from 1 in ispd benchmarks
     }
 
     fout<<"num wire "<<wires.size()+source_root_wires.size()<<endl;
@@ -1195,7 +1304,14 @@ void Router::writeSolution() {
     count_TSV();
 }
 
-void Router::buildTopology()
+void Router::buildTopology_nngraph()
+{
+    topo=make_shared<TreeTopology>();
+    topo->inittree_nng(taps);
+    topo->treeLayerCal();
+}
+
+void Router::buildTopology_from_binary()
 {
     system(("rm -rf "+_RUNDIR+"/preOrder.txt").c_str());
     system(("rm -rf "+_RUNDIR+"/inOrder.txt").c_str());
@@ -1267,10 +1383,73 @@ void Router::buildTopology()
     assert(preOrderId.size()==inOrderId.size());
     topo=make_shared<TreeTopology>();
     assert(topo);
-    topo->inittree(taps,preOrderId.size(),preOrderId,inOrderId);
+    topo->inittree_from_binary(taps,preOrderId.size(),preOrderId,inOrderId);
     topo->layerassignment(IdAndLayer);
     topo->treeLayerCal();
     //exit(0);
+}
+
+void Router::DLE_3D()
+{
+    DLE_loop(topo->root);
+    topo->root->layer =  topo->root->el.first;
+    assert (topo->root->par==NULL);
+    NearestAssign(topo->root);
+    // std::function<void(shared_ptr<TreeNode>)> preOrderTraversal = [&](shared_ptr<TreeNode> curNode) {
+    //      if(curNode!=nullptr){
+    //         int curId = curNode->id;
+    //         //cout<<"DLE: "<<curId<<" at "<<curNode->layer<<endl;
+    //         preOrderTraversal(curNode->lc);
+    //         preOrderTraversal(curNode->rc);
+    //         //cout<<"preing "<<curId<<" at layer "<<curNode->layer<<endl;
+    //     }
+    // };
+    // preOrderTraversal(topo->root);
+}
+
+void Router::DLE_loop(shared_ptr<TreeNode> node)
+{
+    if(node){
+        //如果已经是根节点，跳过
+        if(!node->lc && !node->rc){
+            node->el.first=node->layer;
+            node->el.second=node->layer;
+            return;
+        }
+        //自下而上递归
+        DLE_loop(node->lc);
+        DLE_loop(node->rc);
+
+        int l1=max(node->lc->el.first,node->rc->el.first);
+        int l2=min(node->lc->el.second,node->rc->el.second);
+        node->el.first=min(l1,l2);
+        node->el.second=max(l1,l2);
+    }
+}
+
+void Router::NearestAssign(shared_ptr<TreeNode> node)
+{
+    if(!node->lc && !node->rc)
+        return;
+
+    if(node->par)
+    {   
+        assert(node->el.first<=node->el.second);
+        if (node->el.first>node->par->layer)
+        {
+            node->layer=node->el.first;
+        }
+        else if(node->el.second<node->par->layer)
+        {
+            node->layer=node->el.second;
+        }
+        else{
+            node->layer=node->par->layer;
+        }
+    }
+
+    NearestAssign(node->lc);
+    NearestAssign(node->rc);
 }
 
 void Router::setdelay_model(int delaymodel)
@@ -1370,7 +1549,7 @@ void Router::draw_solution()
     // outfile << "set yrange [0:" << _pChip->get_height() << "]" << endl;
     // outfile << "plot[:][:] '-' w l lt 3 lw 2, '-' with filledcurves closed fc \"grey90\" fs border lc \"red\", '-' with filledcurves closed fc \"yellow\" fs border lc \"black\", '-' w l lt 1" << endl << endl;
 
-    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' w p pt 7 ps 6, '-' w p pt 5 ps 7 " << endl << endl;
+    outfile << "plot[:][:]  '-' w l lt 3 lw 2, '-' w p pt 7 ps 1, '-' w p pt 5 ps 2, '-' w l lt 4 lw 2, " << endl << endl;
     
     outfile << "# TREE" << endl;
     std::function<void(shared_ptr<GrSteiner>)> traceToSource = [&](shared_ptr<GrSteiner> curNode) {
@@ -1404,15 +1583,23 @@ void Router::draw_solution()
     plotLinePLT(outfile,topo->root->trr.core.p1.x,topo->root->trr.core.p1.y,topo->root->trr.core.p1.x,topo->root->trr.core.p1.y);
     outfile<< "EOF"<< endl;
     
+    outfile << "# Blockages"<<endl;
+    for(BLOCK block:this->blocks)
+    {
+        plotBoxPLT(outfile,block.ll.x,block.ll.y,block.ur.x,block.ll.y,block.ur.x,block.ur.y,block.ll.x,block.ur.y);// counter clock-wise
+    }
+    outfile<< "EOF"<< endl;
+
     // outfile << "pause -1 'Press any key to close.'" << endl;
     outfile.close();
 
     system(("gnuplot " + outFile).c_str());
 
-    cout << BLUE << "[Router]" << RESET << " - Visualize the bottom_up graph in \'" << outFile << "\'.\n";
+    cout << BLUE << "[Router]" << RESET << " - Visualize the solution graph in \'" << outFile << "\'.\n";
 }
 
 double Router::calc_x_RC(shared_ptr<TreeNode> nodeLeft, shared_ptr<TreeNode> nodeRight, shared_ptr<TreeNode> nodeMerge, double L){
+    assert(nodeMerge->metal_layer_index<metals.size());
     metal merge_metal=metals[nodeMerge->metal_layer_index];
     
     double r_w=merge_metal.rw;
@@ -1517,6 +1704,10 @@ float Router::calc_delay_RLC(shared_ptr<TreeNode> nodeMerge, shared_ptr<TreeNode
     if(wireLength == 0)
         return 0;
     //如果两节点中间没有TSV
+    if(nodeChild->load_capacitance> c_constraint)
+    {
+        cout<<"fdafa"<<nodeChild->load_capacitance<<endl;
+    }
     assert(nodeChild->load_capacitance<= c_constraint);
     numerator = wireLength * r_w * (0.5 * wireLength * c_w_standard + calc_standard_Capacitance(nodeChild->load_capacitance));
     //这里分母还没算完，后续要开根
@@ -1736,7 +1927,7 @@ void Router::metalLayerCal()
         {
             cur->metal_layer_index=ceil((double(cur->tree_layer)/double(deepest_tree_layer))*double(metal_layer_number));//! metal layer index starts from 1 rather than 0;
             // cout<<(double(cur->tree_layer)/double(deepest_tree_layer))*double(metal_layer_number)<<endl;
-            // cout<<cur->metal_layer_index<<endl;
+            // cout<<cur->id<<" "<<cur->metal_layer_index<<endl;
         }
     }
 }

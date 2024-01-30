@@ -1,5 +1,6 @@
 #pragma once
 #include "global.h"
+#include "Parser.h"
 using namespace std;
 //#define c_w 0.0002
 #define c_v 372.5
@@ -14,6 +15,17 @@ using namespace std;
 #define ELMORE_DELAY 1
 const double eps = 1e-1;// 1e-4 and 1e-3 seems to large, is 1e-2 ok?
 const double skewModifyStep = 1;
+struct nng_pair{
+    int from;
+    int to;
+    double cost;
+    nng_pair(int _from,int _to,double _cost)
+    {
+        from=_from;
+        to=_to;
+        cost=_cost;
+    }
+};
 
 struct metal{
     double cw;
@@ -26,6 +38,7 @@ struct wire{
     int right_id;
     int metal_index;
 };
+
 
 class PointPair {
     // V_{i,k,n}
@@ -70,6 +83,11 @@ public:
     }
 };
 
+struct BLOCK{
+    GridPoint ll;
+    GridPoint ur;
+};
+
 class TAP : public GridPoint {
 public:
     int id;
@@ -95,6 +113,10 @@ public:
     friend inline std::ostream& operator<<(std::ostream& os, const TAP& tap) {
         os << "TAP " << tap.id << ", x: " << tap.x << ", y: " << tap.y;
         return os;
+    }
+    double cost_dme3d(TAP to)// this: I am from
+    {
+        return abs(x - to.x) + abs(y - to.y); 
     }
 };
 class Segment {
@@ -304,6 +326,7 @@ public:
     double delay;
     int metal_layer_index;// for non-leaf tree nodes, assign the metal used to connect a tree node to its children
     bool buffered=false;
+    pair<int,int> el;// for DLE
     TRR trr;
     shared_ptr<TreeNode> lc;
     shared_ptr<TreeNode> rc;
@@ -333,16 +356,16 @@ public:
 
     //TreeTopology(alglib::integer_2d_array& HC_res) : HC_result(HC_res) {}
     TreeTopology(){}
-    void inittree(vector<TAP> taps, int sz, vector<int> preOrder, vector<int> inOrder);
-    // construct binary tree structure based on current Hierarchical clustering result
+    void inittree_from_binary(vector<TAP> taps, int sz, vector<int> preOrder, vector<int> inOrder);
+    void inittree_nng(vector<TAP> taps);
     void constructTree_old(bool modifyCurrentTree = false);
-    void constructTree(vector<TAP> taps, vector<int> preOrder, vector<int> inOrder);
+    void constructTree_from_binary(vector<TAP> taps, vector<int> preOrder, vector<int> inOrder);
     void layerassignment(vector<pair<int,int>> IdAndLayer);
     void treeLayerCal();
     int getSumOfDiameter();
     // randomly switch leaf nodes to reduce sum of diameter
     void refineStructure(int iter = 10000);
-    shared_ptr<TreeNode> buildTree(vector<TAP> taps, vector<int> pre,vector<int> in, int preStart, int preEnd, int inStart, int inEnd);
+    shared_ptr<TreeNode> buildTree_from_binary(vector<TAP> taps, vector<int> pre,vector<int> in, int preStart, int preEnd, int inStart, int inEnd);
 };
 
 class GrSteiner : public GridPoint {
@@ -392,6 +415,7 @@ public:
     int NUM_TAPS;        // test 1
     int delay_model=1;//0 for linear and 1 for elmore 
     vector<TAP> taps;
+    vector<BLOCK> blocks;
     vector<Segment> vertexMS;  // set of segments
     vector<TRR> vertexTRR;
     vector<double> vertexDistE;
@@ -399,6 +423,7 @@ public:
     int buffercount;
     int tsvcount;
     double totalwirelength;
+    ispd2009_parser ispdparser;
 
     vector<metal> metals;
     string _RUNDIR = "../run_tmp/";
@@ -427,11 +452,16 @@ public:
     void buildSolution_ISPD();
     void reportTotalWL();
     void writeSolution();
-    void buildTopology();
+    void buildTopology_nngraph();// nn for nearest neighbor
+    void buildTopology_from_binary();
+    void DLE_3D();
+    void DLE_loop(shared_ptr<TreeNode> node);
+    void NearestAssign(shared_ptr<TreeNode> node);
     void setdelay_model(int);
     void draw_bottom_up();
     void draw_solution();
     void draw_TRR_pair(TRR trr1,TRR trr2);
+    void draw_blockages();
     void bouncing_check();
     void count_TSV();//! this function is for 2-layer chip only
     Segment TRRintersect(TRR& trr1,TRR& trr2);

@@ -12,45 +12,39 @@
 #include "global.h"
 using namespace std;
 
-struct sink{
+struct parser_sink{
     double x;
     double y;
-    int layer;
+    int layer=1;
     double capacitance;
 };
+struct parser_blockage{
+    double llx;//ll: lower left, ur: upper right
+    double lly;
+    double urx;
+    double ury;
+    int layer=1;
+};
 
-vector<sink> parse(string filePath)
-{
-    ifstream file(filePath);
-    string line, label;
-    int numSink;
-    vector<sink> sinks;
-    while(getline(file, line)){
-        if(line=="" || line[0]=='#') continue;
-        stringstream ss(line);
-        ss >> label;
-        if(label == "num"){ // Netlist (Insts)
-            ss >>label >>numSink;
-            assert(label=="sink");
-            int countInst = 0;
-            while(countInst < numSink){
-                getline(file, line);
-                if(line=="") continue;
-                stringstream ss2(line);
-                // add inst
-                sink tempsink;
-                ss2 >> label >>label>> tempsink.x >> tempsink.y>>tempsink.layer>>tempsink.capacitance;
-                sinks.emplace_back(tempsink);
-                countInst++;
-            }
-            break;
-        }
-    }
-    cout.setf(ios::fixed,ios::floatfield);
-    for(sink sink:sinks)
+class ispd2009_parser{
+    public:
+    string filePath;
+    vector<parser_sink> sinks;
+    vector<parser_blockage> blockages;
+    ispd2009_parser()
     {
-        cout<<sink.x<<" "<<sink.y<<" "<<sink.layer<<" "<<sink.capacitance<<endl;
+        filePath="";
     }
-    return sinks;
-}
+    ispd2009_parser(string _filePath)
+    {
+        filePath=_filePath;
+    }
+    void setFilePath(string path)
+    {
+        filePath=path;
+    }
+    vector<parser_sink> get_sinks();
+    vector<parser_blockage> get_blockages();
+    void parse();
+};
 #endif

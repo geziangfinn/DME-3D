@@ -21,8 +21,10 @@ int main(int argc, char *argv[]){
 
     Router router;
     router.init();
+    router.buildTopology_nngraph();
+    router.DLE_3D();
     //exit(0);
-    router.buildTopology();
+    // router.buildTopology_from_binary();
     router.setdelay_model(ELMORE);
     router.metalLayerCal();
     router.initiate_parameters();
@@ -30,7 +32,7 @@ int main(int argc, char *argv[]){
     router.buildSolution();
     router.draw_solution();
     router.writeSolution();
-    router.buildSolution_ISPD();
+    //router.buildSolution_ISPD();
     cout << "End of Process" << endl;
     return 0;
 }
